@@ -1,0 +1,208 @@
+diff --git a/examples/keygen.c b/examples/keygen.c
+index 99f8c98c..fae49ad5 100644
+--- a/examples/keygen.c
++++ b/examples/keygen.c
+@@ -24,7 +24,7 @@ int main(void)
+     int rv;
+ 
+     /* Generate a new ED25519 private key file */
+-    rv = ssh_pki_generate(SSH_KEYTYPE_ED25519, 0, &key);
++    rv = ssh_pki_generate(SSH_KEYTYPE_ED25519, 0, 0, &key);
+     if (rv != SSH_OK) {
+         fprintf(stderr, "Failed to generate private key");
+         return -1;
+diff --git a/examples/keygen2.c b/examples/keygen2.c
+index 5a8806fc..b8fa327c 100644
+--- a/examples/keygen2.c
++++ b/examples/keygen2.c
+@@ -388,9 +388,9 @@ int main(int argc, char *argv[])
+     } else {
+         close(rc);
+     }
+-
++    
+     /* Generate a new private key */
+-    rc = ssh_pki_generate(arguments.type, arguments.bits, &key);
++    rc = ssh_pki_generate(arguments.type, arguments.bits, 0, &key);
+     if (rc != SSH_OK) {
+         fprintf(stderr, "Error: Failed to generate keys");
+         goto end;
+diff --git a/include/libssh/ed25519.h b/include/libssh/ed25519.h
+index 72a86c0b..50e03b86 100644
+--- a/include/libssh/ed25519.h
++++ b/include/libssh/ed25519.h
+@@ -47,7 +47,7 @@ extern "C" {
+  * @param[out] sk generated secret key
+  * @return     0 on success, -1 on error.
+  * */
+-int crypto_sign_ed25519_keypair(ed25519_pubkey pk, ed25519_privkey sk);
++    int crypto_sign_ed25519_keypair(ed25519_pubkey pk, ed25519_privkey sk, const uint8_t* seed);
+ 
+ /** @internal
+  * @brief sign a message with ed25519
+diff --git a/include/libssh/libssh.h b/include/libssh/libssh.h
+index 3bddb019..f504b24c 100644
+--- a/include/libssh/libssh.h
++++ b/include/libssh/libssh.h
+@@ -721,7 +721,7 @@ LIBSSH_API int ssh_key_cmp(const ssh_key k1,
+                            enum ssh_keycmp_e what);
+ LIBSSH_API ssh_key ssh_key_dup(const ssh_key key);
+ 
+-LIBSSH_API int ssh_pki_generate(enum ssh_keytypes_e type, int parameter,
++    LIBSSH_API int ssh_pki_generate(enum ssh_keytypes_e type, int parameter, const uint8_t* seed,
+         ssh_key *pkey);
+ LIBSSH_API int ssh_pki_import_privkey_base64(const char *b64_key,
+                                              const char *passphrase,
+@@ -777,6 +777,7 @@ LIBSSH_API int ssh_pki_export_privkey_to_pubkey(const ssh_key privkey,
+                                                 ssh_key *pkey);
+ LIBSSH_API int ssh_pki_export_pubkey_base64(const ssh_key key,
+                                             char **b64_key);
++LIBSSH_API int ssh_pki_get_pubkey_raw(const ssh_key key, uint8_t** out);
+ LIBSSH_API int ssh_pki_export_pubkey_file(const ssh_key key,
+                                           const char *filename);
+ 
+diff --git a/include/libssh/pki_priv.h b/include/libssh/pki_priv.h
+index 2061ebd7..0ef90149 100644
+--- a/include/libssh/pki_priv.h
++++ b/include/libssh/pki_priv.h
+@@ -64,7 +64,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
+ ssh_key pki_key_dup(const ssh_key key, int demote);
+ int pki_key_generate_rsa(ssh_key key, int parameter);
+ int pki_key_generate_ecdsa(ssh_key key, int parameter);
+-int pki_key_generate_ed25519(ssh_key key);
++    int pki_key_generate_ed25519(ssh_key key, const uint8_t* seed);
+ 
+ int pki_key_compare(const ssh_key k1,
+                     const ssh_key k2,
+diff --git a/src/external/ed25519.c b/src/external/ed25519.c
+index 41b5f289..e575fe43 100644
+--- a/src/external/ed25519.c
++++ b/src/external/ed25519.c
+@@ -78,8 +78,9 @@ static void get_hram(unsigned char *hram,
+ 
+ 
+ int crypto_sign_ed25519_keypair(ed25519_pubkey pk,
+-                                ed25519_privkey sk)
++                                ed25519_privkey sk, const uint8_t* seed)
+ {
++    
+     sc25519 scsk;
+     ge25519 gepk;
+     SHA512CTX ctx;
+@@ -87,9 +88,12 @@ int crypto_sign_ed25519_keypair(ed25519_pubkey pk,
+     int i;
+     int ok;
+ 
+-    ok = ssh_get_random(sk, 32, 0);
+-    if (!ok) {
+-        return -1;
++    if (seed) {
++	memcpy(sk,seed,32);
++    }
++    else {
++	ok = ssh_get_random(sk, 32, 0);
++	if (!ok) return -1;
+     }
+ 
+     ctx = sha512_init();
+diff --git a/src/libssh.map b/src/libssh.map
+index 02f5f683..0f3821e3 100644
+--- a/src/libssh.map
++++ b/src/libssh.map
+@@ -309,6 +309,7 @@ LIBSSH_4_5_0    # Released
+         ssh_pki_export_privkey_file;
+         ssh_pki_export_privkey_to_pubkey;
+         ssh_pki_export_pubkey_base64;
++	ssh_pki_get_pubkey_raw;
+         ssh_pki_export_pubkey_file;
+         ssh_pki_generate;
+         ssh_pki_import_cert_base64;
+diff --git a/src/pki.c b/src/pki.c
+index 17b4845d..3c732e4c 100644
+--- a/src/pki.c
++++ b/src/pki.c
+@@ -2013,9 +2013,10 @@ int ssh_pki_import_cert_file(const char *filename, ssh_key *pkey)
+  *
+  * @see ssh_key_free()
+  */
+-int ssh_pki_generate(enum ssh_keytypes_e type, int parameter,
++int ssh_pki_generate(enum ssh_keytypes_e type, int parameter, const uint8_t* seed,
+         ssh_key *pkey)
+ {
++    
+     int rc;
+     ssh_key key = ssh_key_new();
+ 
+@@ -2063,7 +2064,7 @@ int ssh_pki_generate(enum ssh_keytypes_e type, int parameter,
+             break;
+ #endif /* HAVE_ECC */
+         case SSH_KEYTYPE_ED25519:
+-            rc = pki_key_generate_ed25519(key);
++            rc = pki_key_generate_ed25519(key,seed);
+             if (rc == SSH_ERROR) {
+                 goto error;
+             }
+@@ -2231,6 +2232,17 @@ int ssh_pki_export_pubkey_base64(const ssh_key key,
+     return SSH_OK;
+ }
+ 
++int ssh_pki_get_pubkey_raw(const ssh_key key, uint8_t** out) {
++    if (key->type == SSH_KEYTYPE_ED25519) {
++	*out = malloc(ED25519_KEY_LEN);
++	memcpy(*out,key->ed25519_pubkey,ED25519_KEY_LEN);
++	return 0;
++    }
++    else {
++	return 1;
++    }
++}
++
+ /**
+  * @brief Export public key to file
+  *
+diff --git a/src/pki_crypto.c b/src/pki_crypto.c
+index cbbd1347..e211e9ac 100644
+--- a/src/pki_crypto.c
++++ b/src/pki_crypto.c
+@@ -2634,7 +2634,7 @@ int ssh_key_size(ssh_key key)
+     }
+ }
+ 
+-int pki_key_generate_ed25519(ssh_key key)
++int pki_key_generate_ed25519(ssh_key key, const uint8_t* seed)
+ {
+     int evp_rc;
+     EVP_PKEY_CTX *pctx = NULL;
+@@ -2662,6 +2662,10 @@ int pki_key_generate_ed25519(ssh_key key)
+         goto error;
+     }
+ 
++    if (seed) {
++	//evp_rc = EVP_PKEY_set_params(pkey,params);
++    }
++    
+     evp_rc = EVP_PKEY_keygen(pctx, &pkey);
+     if (evp_rc != 1) {
+         SSH_LOG(SSH_LOG_TRACE,
+diff --git a/src/pki_ed25519.c b/src/pki_ed25519.c
+index 0674fb63..79b93931 100644
+--- a/src/pki_ed25519.c
++++ b/src/pki_ed25519.c
+@@ -28,7 +28,7 @@
+ #include "libssh/ed25519.h"
+ #include "libssh/buffer.h"
+ 
+-int pki_key_generate_ed25519(ssh_key key)
++int pki_key_generate_ed25519(ssh_key key, const uint8_t* seed)
+ {
+     int rc;
+ 
+@@ -43,7 +43,7 @@ int pki_key_generate_ed25519(ssh_key key)
+     }
+ 
+     rc = crypto_sign_ed25519_keypair(*key->ed25519_pubkey,
+-                                     *key->ed25519_privkey);
++                                     *key->ed25519_privkey, seed);
+     if (rc != 0) {
+         goto error;
+     }

@@ -1,0 +1,86 @@
+#include <stdio.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
+
+#include <commands/auth.h>
+#include <profile.h>
+#include <util.h>
+
+void get_password(char *password) {
+    static struct termios old_terminal;
+    static struct termios new_terminal;
+
+    //get settings of the actual terminal
+    tcgetattr(STDIN_FILENO, &old_terminal);
+
+    // do not echo the characters
+    new_terminal = old_terminal;
+    new_terminal.c_lflag &= ~(ECHO);
+
+    // set this as the new terminal options
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_terminal);
+
+    // get the password
+    // the user can add chars and delete if he puts it wrong
+    // the input process is done when he hits the enter
+    // the \n is stored, we replace it with \0
+    if (fgets(password, RAD_BUFSIZ, stdin) == NULL)
+	password[0] = '\0';
+    else
+	password[strlen(password)-1] = '\0';
+
+    // go back to the old settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_terminal);
+    printf("\n");
+}
+
+int auth_run (Command c) {
+    if (profile_load()) {
+	printf("Good, you have a profile!\n");
+	return 0;
+    }
+    else {
+	return auth_init();
+    }
+    return 0;
+}
+
+int auth_init() {
+    printf("Initializing your radicle identity\n");
+    char alias [RAD_BUFSIZ];
+    char* env_user = getenv("USER");
+    printf("? Enter your alias (%s) ",env_user);
+    fgets(alias,RAD_BUFSIZ,stdin);
+    rad_strip(alias);
+    if (!strlen(alias)) rad_strcpy(alias,env_user,0,RAD_BUFSIZ-1);
+    printf("Your alias is: %s\n",alias);
+    char* passphrase = malloc(RAD_BUFSIZ);
+    while (1) {
+	printf("? Enter a passphrase: ");
+	get_password(passphrase);
+	char passphrase_repeat [RAD_BUFSIZ];
+	printf("? Repeat passphrase: ");
+	get_password(passphrase_repeat);
+	if (!strcmp(passphrase,passphrase_repeat)) {
+	    break;
+	}
+	else {
+	    printf("Passphrases do not match\n");
+	}
+    }
+    if (passphrase && !strlen(passphrase)) {
+	free(passphrase);
+	passphrase = 0;
+    }
+    printf("Creating your Ed25519 keypair...\n");
+    uint8_t* seed = 0;
+    char* env_seed = getenv("RAD_KEYGEN_SEED");
+    if (env_seed && strlen(env_seed)==64) {
+	seed = rad_hex_to_uchar(env_seed);
+    }
+    profile_init(alias,passphrase,seed);
+    if (seed) free(seed);
+    if (passphrase) free(passphrase);
+    return 0;
+}
