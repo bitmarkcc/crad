@@ -3,6 +3,7 @@
 
 #include <version.h>
 #include <commands/auth.h>
+#include <commands/init.h>
 
 void print_error(const char *msg) {
     fprintf(stderr, "rad: %s\n", msg);
@@ -99,6 +100,9 @@ int main (int argc, char** argv)  {
 	    Command subcommand = parse_args(cmd.argc,cmd.argv);	    
 	    if (!strcmp(exe,"auth")) {
 		return auth_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"init")) {
+		return init_run(subcommand);
 	    }
 	}
 	break;

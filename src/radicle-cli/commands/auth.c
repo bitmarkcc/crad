@@ -51,10 +51,8 @@ int auth_init() {
     char alias [RAD_BUFSIZ];
     char* env_user = getenv("USER");
     printf("? Enter your alias (%s) ",env_user);
-    fgets(alias,RAD_BUFSIZ,stdin);
-    rad_strip(alias);
+    rad_get_input(alias,RAD_BUFSIZ);
     if (!strlen(alias)) rad_strcpy(alias,env_user,0,RAD_BUFSIZ-1);
-    printf("Your alias is: %s\n",alias);
     char* passphrase = malloc(RAD_BUFSIZ);
     while (1) {
 	printf("? Enter a passphrase: ");

@@ -1,7 +1,4 @@
 all:
-	gcc -g -I./ -I../radicle -I/usr/local/include -o rad main.c command.c commands/auth.c -L../radicle -L/usr/local/lib64 -lradicle -lssh
+	gcc -g -I./ -I../radicle -I/usr/local/include -o rad main.c command.c commands/auth.c commands/init.c -L../radicle -L/usr/local/lib64 -lradicle -lssh -lgit2
 clean:
-	rm -f *~
-	rm -f rad
-	rm -f commands/*~
-
+	rm -f *~ rad commands/*~
