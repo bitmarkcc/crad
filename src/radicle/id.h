@@ -4,10 +4,6 @@
 #include <stdint.h>
 #include <git2.h>
 
-typedef struct {
-    char id [32];
-} Rid;
-
 typedef git_oid Oid;
 
 char* pubkey_to_did (const uint8_t* key);

@@ -8,7 +8,7 @@
 #include <storage.h>
 
 typedef struct {
-    Rid rid;
+    Oid rid;
     Document* doc;
     int ret; // return code
 } rad_project_result;

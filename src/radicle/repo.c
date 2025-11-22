@@ -65,8 +65,3 @@ RadRepo rad_repo_create (const char* path, const Oid rid, const StorageInfo si) 
     rrepo.repo = repo;
     return rrepo;
 }
-
-Rid rad_repo_rid_from_oid (const Oid oid) {
-    Rid rid;
-    return rid;
-}

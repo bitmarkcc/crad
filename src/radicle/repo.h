@@ -24,8 +24,6 @@ typedef struct {
 
 RadRepoResult rad_repo_init (Document doc, Storage s, Pubkey signer);
 
-Rid rad_repo_rid_from_oid(const Oid oid);
-
 RadRepo rad_repo_create(const char* path, const Oid rid, StorageInfo si);
 
 char* get_rad_home ();
