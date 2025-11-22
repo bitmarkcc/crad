@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <termios.h>
@@ -8,6 +9,7 @@
 #include <profile.h>
 #include <util.h>
 #include <git.h>
+#include <rad.h>
 
 int init_run (Command c) {
     if (!profile_load()) {
@@ -32,10 +34,10 @@ int init_init() {
     printf("? Name (%s) ",name_default);
     rad_get_input(name,RAD_BUFSIZ);
     if (!strlen(name)) rad_strcpy(name,name_default,0,RAD_BUFSIZ-1);
-    char description [RAD_BUFSIZ2];
+    char description [RAD_BUFSIZ];
     printf("? Description ");
     while (1) {
-	rad_get_input(description,RAD_BUFSIZ2);
+	rad_get_input(description,RAD_BUFSIZ);
 	if (strlen(description)) break;
     }
     rad_git_init();
@@ -60,7 +62,18 @@ int init_init() {
     if (!strlen(ispublic)) rad_strcpy(ispublic,"no",0,RAD_BUFSIZ-1);
     char* ispublic_lower = rad_to_lower(ispublic);
     if (!strcmp(ispublic_lower,"yes")) public = true;
+    Visibility visibility = VIS_PRIVATE;
+    if (public)
+	visibility = VIS_PUBLIC;
+    Pubkey signer = profile_get_pubkey();
+    Storage storage = profile_get_storage();	
+    rad_project_result res = rad_project_init(repo,name,description,branch,visibility,signer,storage);
+    if (res.ret) {
+	fprintf(stderr,"Failed to initialize project\n");
+	return 1;
+    }
     free(ispublic_lower);
     git_repository_free(repo);
+    printf("Initialized project\n");
     return 0;
 }

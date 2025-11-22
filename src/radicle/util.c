@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <assert.h>
 
 #include <util.h>
 
@@ -19,11 +20,45 @@ char* rad_strcpy (char* out, const char* inp, int from, int len) {
     return out;
 }
 
-void rad_strip(char* s) {
-    int len_s = strlen(s);
-    if (s[len_s-1]=='\n') {
-	s[len_s-1] = 0;
+void rad_rstrip_nl(char* str) {
+    int len_str = strlen(str);
+    if (str[len_str-1]=='\n') {
+	str[len_str-1] = 0;
     }
+}
+
+char* rad_strip (char c, const char* str) {
+    char* out = malloc(strlen(str)+1);
+    bool start = true;
+    int i = 0;
+    while (*str) {
+	if (start && *str==c) {
+	    str++;
+	    continue;
+	}
+	if (*str!=c) {
+	    start = false;
+	}
+	if (!start) {
+	    out[i] = *str;
+	}
+	i++;
+	str++;
+    }
+    bool end = true;
+    char* it = out+i-1;
+    while (*it) {
+	if (end && *it==c) {
+	    it--;
+	    continue;
+	}
+	if (*it!=c) {
+	    end = false;
+	    it[1] = 0;
+	    break;
+	}
+    }
+    return out;
 }
 
 const signed char p_util_hexdigit[256] =
@@ -69,7 +104,7 @@ bool rad_is_space (char c) {
 
 bool rad_get_input (char* str, size_t bufsiz) {
     if (!fgets(str,bufsiz,stdin)) return false;
-    rad_strip(str);
+    rad_rstrip_nl(str);
     return true;
 }
 
@@ -81,4 +116,26 @@ char* rad_to_lower (const char* str) {
     }
     out[len] = 0;
     return out;
+}
+
+char* rad_remove_space_json (const char* str) {
+    size_t len = strlen(str);
+    char* out = malloc(len+1);
+    int j=0;
+    bool inValue = false;
+    for (int i=0; i<len; i++) {
+	if (!inValue && rad_is_space(str[i])) continue;
+	out[j] = str[i];
+	if (inValue && out[j] == '"') inValue = false;
+	else if (out[j]=='"' && out[j-1]==':') inValue = true;
+	j++;
+    }
+    out[j] = 0;
+    return out;    
+}
+
+void rad_assert_equal (const uint8_t* a, const uint8_t* b, size_t n) {
+    for (int i=0; i<n; i++) {
+	assert(a[i] == b[i]);
+    }
 }

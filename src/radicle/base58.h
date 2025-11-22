@@ -2,6 +2,7 @@
 #define RAD_BASE58_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 uint8_t* decode_base58(const char* str, int max_ret_len);
 

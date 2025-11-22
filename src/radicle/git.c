@@ -1,5 +1,6 @@
-#include <git2.h>
 #include <stdio.h>
+
+#include <git.h>
 
 void rad_git_init () {
     git_libgit2_init();
