@@ -67,7 +67,7 @@ int init_init() {
 	visibility = VIS_PUBLIC;
     Pubkey signer = profile_get_pubkey();
     Storage storage = profile_get_storage();	
-    rad_project_result res = rad_project_init(repo,name,description,branch,visibility,signer,storage);
+    RadProjectResult res = rad_project_init(repo,name,description,branch,visibility,signer,storage);
     if (res.ret) {
 	fprintf(stderr,"Failed to initialize project\n");
 	return 1;

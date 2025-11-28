@@ -32,4 +32,8 @@ char* rad_remove_space_json (const char* str);
 
 void rad_assert_equal (const uint8_t* a, const uint8_t* b, size_t n);
 
+int rad_push_array (size_t* pn, void** arr, size_t m, void* pelement); 
+
+char* time_offset (int offset);
+
 #endif

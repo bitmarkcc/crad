@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
-#include <libssh/libssh.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <json-c/json.h>
@@ -81,6 +80,30 @@ Pubkey profile_get_pubkey() {
     free(keydir);
     free(pubkeyfile);
     return pubkey;
+}
+
+ssh_key profile_get_privkey () {
+    ssh_key key;
+    char* rad_home = get_rad_home();
+    if (!rad_home) {
+	fprintf(stderr,"Can't get Radicle home directory\n");
+	return key;
+    }
+    char* keydir = malloc(strlen(rad_home)+6);
+    strcpy(keydir,rad_home);
+    strcat(keydir,"/keys");
+    if (access(keydir,F_OK)) {
+	fprintf(stderr,"Can't find Radicle keys directory\n");
+	return key;
+    }
+    char* privkeyfile = malloc(strlen(keydir)+9);
+    strcpy(privkeyfile,keydir);
+    strcat(privkeyfile,"/radicle");
+    if (ssh_pki_import_privkey_file(privkeyfile,0,0,0,&key) != SSH_OK) { // todo handle passphrase
+	fprintf(stderr,"Failed to import privkey file\n");
+	return key;
+    }
+    return key;
 }
 
 bool profile_init (const char* alias, const char* passphrase, const uint8_t* seed) {

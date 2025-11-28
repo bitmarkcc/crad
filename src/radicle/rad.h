@@ -11,8 +11,10 @@ typedef struct {
     Oid rid;
     Document* doc;
     int ret; // return code
-} rad_project_result;
+} RadProjectResult;
 
-rad_project_result rad_project_init (const git_repository* repo, const char* name, const char* description, const char* default_branch, const Visibility visibility, const Pubkey signer, const Storage storage);
+RadProjectResult rad_project_init (const git_repository* repo, const char* name, const char* description, const char* default_branch, const Visibility visibility, const Pubkey signer, const Storage storage);
+
+RadRepoResult rad_repo_init (Document doc, Storage s, Pubkey signer);
 
 #endif

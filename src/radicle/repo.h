@@ -1,10 +1,10 @@
 #ifndef RADICLE_REPO_H
 #define RADICLE_REPO_H
 
-#include <document.h>
 #include <storage.h>
 #include <key.h>
 #include <id.h>
+#include <cob/identity.h>
 
 typedef struct {
     Oid rid;
@@ -22,10 +22,16 @@ typedef struct {
     uint8_t* bytes;
 } OidBytes;
 
-RadRepoResult rad_repo_init (Document doc, Storage s, Pubkey signer);
+typedef struct {
+    Oid oid;
+} RepoEntry;
 
-RadRepo rad_repo_create(const char* path, const Oid rid, StorageInfo si);
+RadRepo rad_repo_default ();
 
-char* get_rad_home ();
+RadRepo rad_repo_create (const char* path, const Oid rid, StorageInfo si);
+
+RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec);
+
+int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id);
 
 #endif

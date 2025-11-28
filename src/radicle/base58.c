@@ -114,10 +114,11 @@ char* encode_base58 (const uint8_t* inp, size_t len) {
         it++;
     }
 
-    char* str = malloc(zeroes+(b58+size-it));
+    char* str = malloc(zeroes+(b58+size-it)+1);
     memset(str,'1',zeroes);
     str += zeroes;
-    char* str_it = str;
+    *str = 'z';
+    char* str_it = str+1;
     while (it != b58+size) {
 	*str_it++ = base58[*(it++)];
     }

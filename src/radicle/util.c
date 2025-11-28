@@ -139,3 +139,31 @@ void rad_assert_equal (const uint8_t* a, const uint8_t* b, size_t n) {
 	assert(a[i] == b[i]);
     }
 }
+
+int rad_push_array (size_t* pn, void** arr, size_t m, void* pelement) {
+    size_t n = *pn;
+    if (n>0) {
+	*arr = realloc(*arr,(n+1)*m);
+	memcpy(*arr+n*m,pelement,m);
+    }
+    else {
+	*arr = malloc(m);
+	memcpy(*arr,pelement,m);
+    }
+    *pn = n+1;
+}
+
+char* time_offset (int offset) {
+    if (offset<0) return "0000"; //shouldn't happen
+    char* offset_str = malloc(5);
+    memset(offset_str,'0',4);
+    if (offset < 10)
+	sprintf(offset_str+3,"%d",offset);
+    else if (offset < 100)
+	sprintf(offset_str+2,"%d",offset);
+    else if (offset < 1000)
+	sprintf(offset_str+1,"%d",offset);
+    else
+	sprintf(offset_str,"%d",offset);
+    return offset_str;
+}

@@ -5,6 +5,7 @@
 #include <util.h>
 #include <project.h>
 #include <id.h>
+#include <repo.h>
 
 typedef enum {
     VIS_PUBLIC,
@@ -24,12 +25,15 @@ typedef struct {
     Oid oid;
     size_t n_bytes;
     uint8_t* bytes;
+    char* sig;
 } DocumentEncoding;
 
 extern const uint32_t IDENTITY_VERSION;
 
-Document document_init (Project project, Pubkey delegate, Visibility visibility);
+Oid document_init (Document doc, RadRepo rrepo, Pubkey signer);
 
 DocumentEncoding document_encode (Document doc);
+
+DocumentEncoding document_sign (Document doc, Pubkey signer);
 
 #endif
