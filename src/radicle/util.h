@@ -36,4 +36,6 @@ int rad_push_array (size_t* pn, void** arr, size_t m, void* pelement);
 
 char* time_offset (int offset);
 
+int exec_command (const char* file, char* const argv []); 
+
 #endif

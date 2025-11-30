@@ -15,15 +15,19 @@ Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer)
     RepoEntry re = cob_identity_init(doc,rrepo,signer);
     // Create symbolic link ../refs/rad/id -> ../refs/cobs/xyz.radicle.id/<id>
     git_reference* ref = 0;
-    const char* refname = "refs/rad/id";
+    char refname [256];
     char reftarget [256];
     char reflogmsg [256];
     const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf[HEXSIZ];
     char* cob_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&re.oid));
+    char* did_core = pubkey_to_did(signer.bytes)+8;
+    strcpy(refname,"refs/namespaces/");
+    strcat(refname,did_core);
+    strcat(refname,"/refs/rad/id");
     strcpy(reftarget,"refs/namespaces/");
-    strcat(reftarget,pubkey_to_did(signer.bytes)+8);
-    strcat(reftarget,"/xyz.radicle.id/");
+    strcat(reftarget,did_core);
+    strcat(reftarget,"/refs/cobs/xyz.radicle.id/");
     strcat(reftarget,cob_id_str);
     strcpy(reflogmsg,"Create `rad/id` reference to point to new identity COB");
     
@@ -31,6 +35,7 @@ Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer)
 	fprintf(stderr,"Failed to create symbolic git reference\n");
 	return commit;
     }
+    commit = re.oid;
     return commit;
 }
 

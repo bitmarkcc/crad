@@ -231,3 +231,55 @@ int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid ob
     }
     return 0;
 }
+
+int rad_repo_configure (git_repository* repo) { // for git repo
+    git_config* config = 0;
+    if (git_repository_config(&config,repo)) {
+	fprintf(stderr,"failed to get the config file for the git repository\n");
+	return 1;
+    }
+    git_config_set_string(config,"push.default","upstream");
+}
+
+int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl, char* pushurl) { // for git repo
+    
+    char fetchspec [128];
+
+    sprintf(fetchspec,"+refs/heads/*:refs/remotes/%s/*",name);
+    git_remote* remote = 0;
+    if(git_remote_create_with_fetchspec(&remote,repo,name,fetchurl,fetchspec)) {
+	fprintf(stderr,"Failed to create fetch remote\n");
+	return 1;
+    }
+
+    sprintf(fetchspec,"+refs/tags/*:refs/remotes/%s/tags/*",name);
+    if (git_remote_add_fetch(repo,name,fetchspec)) {
+	fprintf(stderr,"Failed to add fetchspec to remote %s\n",name);
+	return 1;
+    }
+    
+    if (strcmp(name,"rad")) {
+	git_config* config = 0;
+	if (git_repository_config(&config,repo)) {
+	    fprintf(stderr,"failed to get the config file for the git repository\n");
+	    return 1;
+	}
+	char* buf = malloc(strlen(name)+18);
+	strcpy(buf,"remote.");
+	strcat(buf,name);
+	strcat(buf,".pruneTags");
+	git_config_set_bool(config,buf,0);
+	strcpy(buf,"remote.");
+	strcat(buf,name);
+	strcat(buf,".tagOpt");
+	git_config_set_string(config,buf,"--no-tags");	
+    }
+
+    if (strcmp(pushurl,fetchurl)) {
+	if (git_remote_set_pushurl(repo,name,pushurl)) {
+	    fprintf(stderr,"Failed to set push url for remote %s\n",name);
+	    return 1;
+	}
+    }
+    return 0;
+}

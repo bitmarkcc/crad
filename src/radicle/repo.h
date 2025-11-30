@@ -34,4 +34,8 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
 
 int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id);
 
+int rad_repo_configure (git_repository* repo);
+
+int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl, char* pushurl);
+
 #endif

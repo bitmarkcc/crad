@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <assert.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 #include <util.h>
 
@@ -166,4 +168,19 @@ char* time_offset (int offset) {
     else
 	sprintf(offset_str,"%d",offset);
     return offset_str;
+}
+
+int exec_command (const char* file, char* const argv []) {
+    int pid = fork();
+    switch (pid) {
+    case -1:
+	fprintf(stderr,"fork failed");
+	return 1;
+    case 0:
+	//setpgrp(); //todo check if needed
+	return execvp(file,argv);
+    default:
+	waitpid(pid,0,0);
+	return 0;
+    }
 }
