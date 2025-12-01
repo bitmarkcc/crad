@@ -38,4 +38,6 @@ int rad_repo_configure (git_repository* repo);
 
 int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl, char* pushurl);
 
+RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message); 
+
 #endif

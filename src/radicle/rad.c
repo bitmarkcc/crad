@@ -60,7 +60,6 @@ RadRepoResult rad_repo_init (const Document doc, const Storage s, const Pubkey s
 }
 
 int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default_branch, Oid identity, Pubkey signer) {
-    printf("doing rad_init_configure\n");
     
     rad_repo_configure(repo);
     
@@ -98,8 +97,6 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     argv[4] = strdup(rad_path);
     argv[5] = strdup(refspec);
     argv[6] = 0;
-
-    printf("cd %s; git push %s %s\n",path,rad_path,refspec);
     
     if (exec_command("git",argv)) {
 	fprintf(stderr,"git command failed\n");
@@ -112,27 +109,17 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     git_reference_name_to_id(&oid,repo,src);
     char reflogmsg [256];
     sprintf(reflogmsg,"radicle: remote branch rad/%s",default_branch);
-    printf("%s\n",reflogmsg);
     git_reference* ref = 0;
     git_reference_create(&ref,repo,refname,&oid,0,reflogmsg);
-
-    /*
-      stored.set_remote_identity_root_to(pk, identity)?;
-      stored.set_identity_head_to(identity)?;
-      stored.set_head()?; // todo check why this is so complex in the rust code
-    */
     
     sprintf(refname,"refs/namespaces/%s/refs/rad/root",didcore);
 
     const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf [HEXSIZ];
-    printf("do set-id-root with refname %s and oid %s\n",refname,git_oid_tostr(buf,HEXSIZ,&identity));
     if (git_reference_create(&ref,rrepo.repo,refname,&identity,1,"set-id-root (radicle)")) {
 	fprintf(stderr,"Failed to set git reference\n");
 	return 1;
     }
-
-    printf("do set-local-branch\n");
     
     if (git_reference_create(&ref,rrepo.repo,"refs/rad/id",&identity,1,"set-local-branch (radicle)")) {
 	fprintf(stderr,"Failed to set git reference\n");
@@ -145,22 +132,98 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
 	fprintf(stderr,"Failed to get oid from git reference name\n");
 	return 1;
     }
-    printf("set local branch again\n");
     
     if (git_reference_create(&ref,rrepo.repo,refname,&oid_head,1,"set-local-branch (radicle)")) {
 	fprintf(stderr,"Failed to set git reference\n");
 	return 1;
     }
-
-    printf("do set-head\n");
     
     sprintf(refname,"refs/heads/%s",default_branch);
     if (git_reference_symbolic_create(&ref,rrepo.repo,"HEAD",refname,1,"set-head (radicle)")) {
 	fprintf(stderr,"Failed to create symbolic git reference\n");
 	return 1;
     }
+
+    char refs_str [1024];
+    char* identity_str = strdup(git_oid_tostr(buf,HEXSIZ,&identity));
+    char* oid_head_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_head));
+    strcpy(refs_str,identity_str);
+    strcat(refs_str," refs/cobs/xyz.radicle.id/");
+    strcat(refs_str,identity_str);
+    strcat(refs_str,"\n");
+    strcat(refs_str,oid_head_str);
+    strcat(refs_str," refs/heads/");
+    strcat(refs_str,default_branch);
+    strcat(refs_str,"\n");
+    strcat(refs_str,identity_str);
+    strcat(refs_str," refs/rad/id\n");
+    strcat(refs_str,identity_str);
+    strcat(refs_str," refs/rad/root\n");
+
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	fprintf(stderr,"Failed to get repository odb\n");
+	return 1;
+    }
+
+    if (git_odb_write(&oid,odb,(uint8_t*)refs_str,strlen(refs_str),GIT_OBJECT_BLOB)) {
+	fprintf(stderr,"Failed to write refs to odb\n");
+	return 1;
+    }
+
+    Oid oid_refs = {{0}};
+    if (git_oid_cpy(&oid_refs,&oid)) {
+	fprintf(stderr,"Failed to copy oid structure\n");
+	return 1;
+    }
+
+    const char* oid_refs_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_refs));
+
+    uint8_t* sig_raw = 0;
+    size_t sig_raw_len = 0;
+    key_sign_raw_unencoded(&sig_raw,&sig_raw_len,signer,refs_str,strlen(refs_str));
+
+    if (git_odb_write(&oid,odb,sig_raw,sig_raw_len,GIT_OBJECT_BLOB)) {
+	fprintf(stderr,"Failed to write sig to odb\n");
+	return 1;
+    }
+
+    Oid oid_sig = {{0}};
+    if (git_oid_cpy(&oid_sig,&oid)) {
+	fprintf(stderr,"Failed to copy oid structure\n");
+	return 1;
+    }
+
+    const char* oid_sig_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_sig));
     
-    // let signed = stored.sign_refs(signer)?;
+    git_treebuilder* treebuilder = 0;
+    if (git_treebuilder_new(&treebuilder,rrepo.repo,0)) {
+	fprintf(stderr,"Failed to initialize treebuilder\n");
+	return 1;
+    }
+    const git_tree_entry* tree_entry = 0;
+    if (git_treebuilder_insert(&tree_entry,treebuilder,"refs",&oid_refs,GIT_FILEMODE_BLOB)) {
+	fprintf(stderr,"Failed to insert to treebuilder\n");
+	return 1;
+    }
+    if (git_treebuilder_insert(&tree_entry,treebuilder,"signature",&oid_sig,GIT_FILEMODE_BLOB)) {
+	fprintf(stderr,"Failed to insert to treebuilder\n");
+	return 1;
+    }
+
+    if (git_treebuilder_write(&oid,treebuilder)) {
+	fprintf(stderr,"Failed to write to treebuilder\n");
+	return 1;
+    }
+
+    Oid* related = 0;
+    size_t n_related = 0;
+    char** headers = 0;
+    size_t n_headers = 0;
+    char** trailers = 0;
+    size_t n_trailers = 0;
+    char* message = "Update signed refs";
+    rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
     
     return 0;
 }

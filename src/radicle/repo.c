@@ -44,17 +44,86 @@ RadRepo rad_repo_create (const char* path, const Oid rid, const StorageInfo si) 
     return rrepo;
 }
 
+RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message) {
+
+    Oid oid;
+    RepoEntry re;
+    re.oid = oid;
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	fprintf(stderr,"Failed to get repository odb\n");
+	return re;
+    }
+    
+    char commit_str [4096]; //todo set right size
+    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
+    char buf [HEXSIZ];
+    git_signature* gitsig = 0;
+    if (git_signature_default(&gitsig,rrepo.repo)) {
+	fprintf(stderr,"Failed to get git signature\n");
+	return re;
+    }
+    char* author_name = gitsig->name;
+    char* author_email = gitsig->email;
+    char author_time [20];
+    sprintf(author_time,"%ld",gitsig->when.time);
+    char author_sign [2];
+    sprintf(author_sign,"%c",gitsig->when.sign);
+    strcpy(commit_str,"tree ");
+    strcat(commit_str,strdup(git_oid_tostr(buf,HEXSIZ,&tree_oid)));
+    strcat(commit_str,"\n");
+    for (size_t i=0; i<n_related; i++) {
+	if (git_oid_is_zero(related+i)) continue;
+	strcat(commit_str,"parent ");
+	strcat(commit_str,strdup(git_oid_tostr(buf,HEXSIZ,related+i)));
+	strcat(commit_str,"\n");
+    }
+    strcat(commit_str,"author ");
+    strcat(commit_str,author_name);
+    strcat(commit_str," <");
+    strcat(commit_str,author_email);
+    strcat(commit_str,"> ");
+    strcat(commit_str,author_time);
+    strcat(commit_str," ");
+    strcat(commit_str,author_sign);
+    strcat(commit_str,time_offset(gitsig->when.offset));
+    strcat(commit_str,"\n");
+    strcat(commit_str,"committer ");
+    strcat(commit_str,author_name);
+    strcat(commit_str," <");
+    strcat(commit_str,author_email);
+    strcat(commit_str,"> ");
+    strcat(commit_str,author_time);
+    strcat(commit_str," ");
+    strcat(commit_str,author_sign);
+    strcat(commit_str,time_offset(gitsig->when.offset));
+    strcat(commit_str,"\n");
+    for (size_t i=0; i<n_headers; i++) {
+	strcat(commit_str,headers[i]);
+	strcat(commit_str,"\n");
+    }
+    strcat(commit_str,"\n");
+    strcat(commit_str,message);
+    strcat(commit_str,"\n");
+
+    if (n_trailers)
+	strcat(commit_str,"\n");
+    
+    for (size_t i=0; i<n_trailers; i++) {
+	strcat(commit_str,trailers[i]);
+    }
+
+    if (git_odb_write(&oid,odb,(uint8_t*)commit_str,strlen(commit_str),GIT_OBJECT_COMMIT)) {
+	fprintf(stderr,"Failed to write commit to odb\n");
+	return re;
+    }
+
+    re.oid = oid;
+    return re;
+}
+
 RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec) {
-    /*
-    change::Template{type_name,tips,message,embeds,contents} = spec;
-    manifest = store_manifest_new(type_name,version_default);
-    revision = write_manifest(&manifest,embeds,&contents);
-    tree = self.find_tree(revision);
-    signature = signer.sign(revision.bytes);
-    related.sort();
-    related.dedup();
-    (id,timestamp) = write_commit(self,reource.map(..),tips.iter(..),message,signature,related,tree);
-    return Entry{id,revision,signature,resource,parents,related,manifest,contents,timestamp}*/
+
     RepoEntry re = {{0}};
     Manifest manifest;
     manifest.type_name = spec.type_name;
@@ -130,83 +199,15 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
     oids_dedup(&related,&n_related);
     oids_sort(&related,n_related);
 
-    //write_commit(resource,tips,message,sig_full,related,oid);
-
     char* header = malloc(2048); //todo set right size
     strcpy(header,"gpgsig ");
-    strcat(header,sig_full);    
+    strcat(header,sig_full);
     char** headers = &header;
     size_t n_headers = 1;
     char** trailers = 0;
     size_t n_trailers = 0;
     
-    // turn this to a new function
-    
-    char commit_str [4096]; //todo set right size
-    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
-    char buf [HEXSIZ];
-    git_signature* gitsig = 0;
-    if (git_signature_default(&gitsig,rrepo.repo)) {
-	fprintf(stderr,"Failed to get git signature\n");
-	return re;
-    }
-    char* author_name = gitsig->name;
-    char* author_email = gitsig->email;
-    char author_time [20];
-    sprintf(author_time,"%ld",gitsig->when.time);
-    char author_sign [2];
-    sprintf(author_sign,"%c",gitsig->when.sign);
-    strcpy(commit_str,"tree ");
-    strcat(commit_str,strdup(git_oid_tostr(buf,HEXSIZ,&oid)));
-    strcat(commit_str,"\n");
-    for (size_t i=0; i<n_related; i++) {
-	if (git_oid_is_zero(related+i)) continue;
-	strcat(commit_str,"parent ");
-	strcat(commit_str,strdup(git_oid_tostr(buf,HEXSIZ,related+i)));
-	strcat(commit_str,"\n");
-    }
-    strcat(commit_str,"author ");
-    strcat(commit_str,author_name);
-    strcat(commit_str," <");
-    strcat(commit_str,author_email);
-    strcat(commit_str,"> ");
-    strcat(commit_str,author_time);
-    strcat(commit_str," ");
-    strcat(commit_str,author_sign);
-    strcat(commit_str,time_offset(gitsig->when.offset));
-    strcat(commit_str,"\n");
-    strcat(commit_str,"committer ");
-    strcat(commit_str,author_name);
-    strcat(commit_str," <");
-    strcat(commit_str,author_email);
-    strcat(commit_str,"> ");
-    strcat(commit_str,author_time);
-    strcat(commit_str," ");
-    strcat(commit_str,author_sign);
-    strcat(commit_str,time_offset(gitsig->when.offset));
-    strcat(commit_str,"\n");
-    for (size_t i=0; i<n_headers; i++) {
-	strcat(commit_str,headers[i]);
-	strcat(commit_str,"\n");
-    }
-    strcat(commit_str,"\n");
-    strcat(commit_str,spec.message);
-    strcat(commit_str,"\n");
-
-    if (n_trailers)
-	strcat(commit_str,"\n");
-    
-    for (size_t i=0; i<n_trailers; i++) {
-	strcat(commit_str,trailers[i]);
-    }
-
-    if (git_odb_write(&oid,odb,(uint8_t*)commit_str,strlen(commit_str),GIT_OBJECT_COMMIT)) {
-	fprintf(stderr,"Failed to write commit to odb\n");
-	return re;
-    }
-
-    re.oid = oid;
-    return re;
+    return rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,spec.message);
 }
 
 
