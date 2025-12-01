@@ -74,6 +74,8 @@ int init_init() {
     }
     free(ispublic_lower);
     git_repository_free(repo);
-    printf("Initialized project\n");
+    char rid_str [128];
+    sprintf(rid_str,"rad:%s",oid_to_rid(res.rid));
+    printf("Initialized project with repo-id %s\n",rid_str);
     return 0;
 }

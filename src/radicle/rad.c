@@ -20,7 +20,7 @@ RadProjectResult rad_project_init (git_repository* repo, const char* name, const
     
     RadProjectResult res;
     Oid rid;
-    res.rid = rid;
+    res.rid = rrepo_result.rrepo.rid;
     res.doc = &doc;
     res.ret = 0;
     return res;

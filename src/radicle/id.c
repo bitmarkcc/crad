@@ -33,5 +33,5 @@ void oids_dedup (Oid** oids, size_t* n) { // todo implement
 }
 
 void oids_sort (Oid** oids, size_t n) { // todo implement
-
+    return;
 }
