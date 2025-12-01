@@ -1,39 +1,10 @@
 #include <stdio.h>
 #include <string.h>
-#include <termios.h>
 #include <unistd.h>
 
 #include <commands/auth.h>
 #include <profile.h>
 #include <util.h>
-
-void get_password(char *password) {
-    static struct termios old_terminal;
-    static struct termios new_terminal;
-
-    //get settings of the actual terminal
-    tcgetattr(STDIN_FILENO, &old_terminal);
-
-    // do not echo the characters
-    new_terminal = old_terminal;
-    new_terminal.c_lflag &= ~(ECHO);
-
-    // set this as the new terminal options
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_terminal);
-
-    // get the password
-    // the user can add chars and delete if he puts it wrong
-    // the input process is done when he hits the enter
-    // the \n is stored, we replace it with \0
-    if (fgets(password, RAD_BUFSIZ, stdin) == NULL)
-	password[0] = '\0';
-    else
-	password[strlen(password)-1] = '\0';
-
-    // go back to the old settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &old_terminal);
-    printf("\n");
-}
 
 int auth_run (Command c) {
     if (profile_load()) {
@@ -53,19 +24,16 @@ int auth_init() {
     printf("? Enter your alias (%s) ",env_user);
     rad_get_input(alias,RAD_BUFSIZ);
     if (!strlen(alias)) rad_strcpy(alias,env_user,0,RAD_BUFSIZ-1);
-    char* passphrase = malloc(RAD_BUFSIZ);
+    char* passphrase = 0;
     while (1) {
 	printf("? Enter a passphrase: ");
-	get_password(passphrase);
-	char passphrase_repeat [RAD_BUFSIZ];
+	passphrase = get_password();
 	printf("? Repeat passphrase: ");
-	get_password(passphrase_repeat);
-	if (!strcmp(passphrase,passphrase_repeat)) {
+	char* passphrase_repeat = get_password();
+	if (!strcmp(passphrase,passphrase_repeat))
 	    break;
-	}
-	else {
+	else
 	    fprintf(stderr,"Passphrases do not match\n");
-	}
     }
     if (passphrase && !strlen(passphrase)) {
 	free(passphrase);

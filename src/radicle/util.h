@@ -38,4 +38,6 @@ char* time_offset (int offset);
 
 int exec_command (const char* file, char* const argv []); 
 
+char* get_password ();
+
 #endif

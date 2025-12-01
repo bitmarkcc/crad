@@ -99,7 +99,9 @@ ssh_key profile_get_privkey () {
     char* privkeyfile = malloc(strlen(keydir)+9);
     strcpy(privkeyfile,keydir);
     strcat(privkeyfile,"/radicle");
-    if (ssh_pki_import_privkey_file(privkeyfile,0,0,0,&key) != SSH_OK) { // todo handle passphrase
+    printf("? passphrase: ");
+    const char* passphrase = get_password();
+    if (ssh_pki_import_privkey_file(privkeyfile,passphrase,0,0,&key) != SSH_OK) { // todo handle passphrase
 	fprintf(stderr,"Failed to import privkey file\n");
 	return key;
     }

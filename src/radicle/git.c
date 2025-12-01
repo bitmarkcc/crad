@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <git.h>
 
@@ -22,7 +23,7 @@ const char* get_default_branch (git_repository* repo) {
 	    fprintf(stderr,"Can't get git repository HEAD\n");
 	    return 0;
 	}
-	const char* shorthand = git_reference_shorthand(head);
+	const char* shorthand = strdup(git_reference_shorthand(head));
 	git_config_free(config);
 	git_reference_free(head);
 	return shorthand;
