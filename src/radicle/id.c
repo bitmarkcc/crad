@@ -20,6 +20,12 @@ char* oid_to_rid (const Oid oid) {
     return rid;
 }
 
+Oid rid_to_oid (const char* rid_str) {
+    Oid oid;
+    memcpy(oid.id,decode_base58(rid_str,20),20);
+    return oid;
+}
+
 bool oid_is_null (const Oid oid) {
     bool res = true;
     for (int i=0; i<20; i++) {

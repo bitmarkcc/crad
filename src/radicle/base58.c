@@ -29,6 +29,7 @@ static const uint8_t map_base58[256] = {
 };
 
 uint8_t* decode_base58 (const char* str, int max_ret_len) {
+    str++; // skip the leading z
     // Skip leading spaces.
     while (*str && rad_is_space(*str))
         str++;
@@ -43,6 +44,7 @@ uint8_t* decode_base58 (const char* str, int max_ret_len) {
     // Allocate enough space in big-endian base256 representation.
     int size = strlen(str) * 733 /1000 + 1; // log(58) / log(256), rounded up.
     uint8_t* b256 = malloc(size);
+    memset(b256,0,size);
     // Process the characters.
     static_assert(sizeof(map_base58) == 256); // guarantee not out of range
     while (*str && !rad_is_space(*str)) {

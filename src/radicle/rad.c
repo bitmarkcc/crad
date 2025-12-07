@@ -223,7 +223,14 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     char** trailers = 0;
     size_t n_trailers = 0;
     char* message = "Update signed refs";
-    rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
+    RepoEntry re = rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
+
+    sprintf(refname,"refs/namespaces/%s/refs/rad/sigrefs",didcore);
+    
+    if (git_reference_create(&ref,rrepo.repo,refname,&re.oid,1,"set sigrefs (radicle)")) {
+	fprintf(stderr,"Failed to set git reference\n");
+	return 1;
+    }
     
     return 0;
 }

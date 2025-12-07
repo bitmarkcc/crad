@@ -6,6 +6,7 @@
 #include <json-c/json.h>
 
 #define RAD_BUFSIZ 256
+#define RAD_BUFSIZ2 512
 
 typedef struct {
     size_t nkeys;
@@ -39,5 +40,7 @@ char* time_offset (int offset);
 int exec_command (const char* file, char* const argv []); 
 
 char* get_password ();
+
+char* rad_substr (const char* str, int start, int len);
 
 #endif

@@ -229,3 +229,16 @@ char* get_password () {
     printf("\n");
     return password;
 }
+
+char* rad_substr (const char* str, int start, int len) {
+    if (start < 0 || len < 0) return 0;
+    int lenstr = strlen(str);
+    if (start + len > lenstr) return 0;
+    if (!len) len = lenstr;
+    char* out = malloc(len+1);
+    for (int i=0; i<len; i++) {
+	out[i] = str[start+i];
+    }
+    out[len] = 0;
+    return out;
+}
