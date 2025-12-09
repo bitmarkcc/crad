@@ -8,7 +8,14 @@
 
 int auth_run (Command c) {
     if (profile_load()) {
-	printf("Good, you have a profile!\n");
+	if (password_loaded()) {
+	    printf("You are already authenticated\n");
+	    return 0;
+	}
+	ssh_key key = 0;
+	if (profile_get_privkey(&key)) {
+	    return 1;
+	}
 	return 0;
     }
     else {
@@ -46,7 +53,11 @@ int auth_init() {
 	seed = rad_hex_to_uchar(env_seed);
     }
     profile_init(alias,passphrase,seed);
+    
     if (seed) free(seed);
-    if (passphrase) free(passphrase);
+    if (passphrase) {
+	memset(passphrase,0,strlen(passphrase));
+	free(passphrase);
+    }
     return 0;
 }

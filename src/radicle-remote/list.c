@@ -9,7 +9,7 @@
 int list_for_push (Storage storage, RadRepo rrepo, const char* did_raw) {
     char buf [HEXSIZ];
     git_reference_iterator* it = 0;
-    char glob [256];
+    char glob [128];
     sprintf(glob,"refs/namespaces/%s/*",did_raw);
     if (git_reference_iterator_glob_new(&it,rrepo.repo,glob)) {
 	fprintf(stderr,"Failed to create glob iterator\n");

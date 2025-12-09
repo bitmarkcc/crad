@@ -284,3 +284,85 @@ int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl,
     }
     return 0;
 }
+
+Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
+    Oid oid_ret = {{0}};
+    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
+    char buf [HEXSIZ];
+    char refs_str [1024]; //todo set the right size
+    *refs_str = 0;
+    git_reference_iterator* it = 0;
+    char glob [128];
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    sprintf(glob,"refs/namespaces/%s/*",did_raw);
+    if (git_reference_iterator_glob_new(&it,rrepo.repo,glob)) {
+	fprintf(stderr,"Failed to create glob iterator\n");
+	return oid_ret;
+    }
+    const char* name = 0;
+    int ret = 0;
+    Oid oid;
+    while (!(ret = git_reference_next_name(&name,it))) {
+	git_reference_name_to_id(&oid,rrepo.repo,name);
+	char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
+	char* short_name = rad_substr(name,17+strlen(did_raw),0); // remove the refs/namespaces/<did>/ part
+	// add oid and short_name to list of refs to sign
+	strcat(refs_str,oid_str);
+	strcat(refs_str," ");
+	strcat(refs_str,short_name);
+	strcat(refs_str,"\n");
+    }
+    if (ret != GIT_ITEROVER) {
+	fprintf(stderr,"Error iterating over glob reference names\n");
+	return oid_ret;
+    }
+    
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	fprintf(stderr,"Failed to get repository odb\n");
+	return oid_ret;
+    }
+    if (git_odb_write(&oid,odb,(uint8_t*)refs_str,strlen(refs_str),GIT_OBJECT_BLOB)) {
+	fprintf(stderr,"Failed to write refs to odb\n");
+	return oid_ret;
+    }
+    Oid oid_refs = {{0}};
+    if (git_oid_cpy(&oid_refs,&oid)) {
+	fprintf(stderr,"Failed to copy oid structure\n");
+	return oid_ret;
+    }
+    const char* oid_refs_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_refs));
+    uint8_t* sig_raw = 0;
+    size_t sig_raw_len = 0;
+    key_sign_raw_unencoded(&sig_raw,&sig_raw_len,signer,refs_str,strlen(refs_str));
+    if (git_odb_write(&oid,odb,sig_raw,sig_raw_len,GIT_OBJECT_BLOB)) {
+	fprintf(stderr,"Failed to write sig to odb\n");
+	return oid_ret;
+    }
+    Oid oid_sig = {{0}};
+    if (git_oid_cpy(&oid_sig,&oid)) {
+	fprintf(stderr,"Failed to copy oid structure\n");
+	return oid_ret;
+    }
+    const char* oid_sig_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_sig));
+    git_treebuilder* treebuilder = 0;
+    if (git_treebuilder_new(&treebuilder,rrepo.repo,0)) {
+	fprintf(stderr,"Failed to initialize treebuilder\n");
+	return oid_ret;
+    }
+    const git_tree_entry* tree_entry = 0;
+    if (git_treebuilder_insert(&tree_entry,treebuilder,"refs",&oid_refs,GIT_FILEMODE_BLOB)) {
+	fprintf(stderr,"Failed to insert to treebuilder\n");
+	return oid_ret;
+    }
+    if (git_treebuilder_insert(&tree_entry,treebuilder,"signature",&oid_sig,GIT_FILEMODE_BLOB)) {
+	fprintf(stderr,"Failed to insert to treebuilder\n");
+	return oid_ret;
+    }
+    if (git_treebuilder_write(&oid,treebuilder)) {
+	fprintf(stderr,"Failed to write to treebuilder\n");
+	return oid_ret;
+    }
+
+    return oid;
+}

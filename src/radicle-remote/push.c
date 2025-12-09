@@ -83,8 +83,6 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	sprintf(dst_full,"%s%s",namespace_prefix,dst);
     }
     //fprintf(stderr,"dst_full %s\n",dst_full);
-    //char* refspec_full = malloc();
-
     char* refspec_full = malloc(strlen(src_full)+strlen(dst_full)+3);
     if (force)
 	sprintf(refspec_full,"+%s:%s",src_full,dst_full);
@@ -121,8 +119,43 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	    fprintf(stderr,"git command failed\n");
 	}
 
-	printf("ok %s\n",dst);
-	
+	// sign refs
+
+	Pubkey signer;
+	signer.bytes = raw_did_to_pubkey(did_raw);	
+	Oid oid = rad_repo_sign_refs(rrepo,signer);
+
+	// update sigrefs
+
+	char update_ref [128];
+	sprintf(update_ref,"refs/namespaces/%s/refs/rad/sigrefs",did_raw);
+	git_signature* gitsig = 0;
+	if (git_signature_default(&gitsig,rrepo.repo)) {
+	    fprintf(stderr,"Failed to get git signature\n");
+	    return 1;
+	}
+	git_tree* tree = 0;
+	if (git_tree_lookup(&tree,rrepo.repo,&oid)) {
+	    fprintf(stderr,"Failed to lookup git tree\n");
+	    return 1;
+	}
+	Oid oid_parent = {{0}};
+	git_commit* parent;
+	if (git_reference_name_to_id(&oid_parent,rrepo.repo,update_ref)) {
+	    fprintf(stderr,"Failed to get oid of git reference name\n");
+	    return 1;
+	}
+	if (git_commit_lookup(&parent,rrepo.repo,&oid_parent)) {
+	    fprintf(stderr,"Failed to lookup git commit\n");
+	    return 1;
+	}
+	const git_commit* parents [1];
+	parents[0] = parent;
+	if (git_commit_create(&oid,rrepo.repo,update_ref,gitsig,gitsig,0,"Update signed refs\n",tree,1,parents)) {
+	    fprintf(stderr,"Error creating git commit\n");
+	    return 1;
+	}
+	printf("ok %s\n\n",dst);
 	return 0;
     }
     return 1;

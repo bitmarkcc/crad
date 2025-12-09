@@ -100,7 +100,7 @@ int main (int argc, char** argv)  {
 	}
 	else if (request_len>3 && !strcmp(rad_substr(request,0,4),"push")) {
 	    char* refspec = rad_substr(request,5,0);
-	    fprintf(stderr,"refspec %s\n",refspec);
+	    //fprintf(stderr,"refspec %s\n",refspec);
 	    if (push_run(refspec,storage,rrepo,did_raw)) {
 		fprintf(stderr,"Failed to push %s\n",refspec);
 		return 1;

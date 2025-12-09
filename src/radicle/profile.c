@@ -82,30 +82,58 @@ Pubkey profile_get_pubkey() {
     return pubkey;
 }
 
-ssh_key profile_get_privkey () {
-    ssh_key key;
+int profile_get_privkey (ssh_key* key) {
     char* rad_home = get_rad_home();
     if (!rad_home) {
 	fprintf(stderr,"Can't get Radicle home directory\n");
-	return key;
+	return 1;
     }
     char* keydir = malloc(strlen(rad_home)+6);
     strcpy(keydir,rad_home);
     strcat(keydir,"/keys");
     if (access(keydir,F_OK)) {
 	fprintf(stderr,"Can't find Radicle keys directory\n");
-	return key;
+	return 1;
     }
     char* privkeyfile = malloc(strlen(keydir)+9);
     strcpy(privkeyfile,keydir);
     strcat(privkeyfile,"/radicle");
-    printf("? passphrase: ");
-    const char* passphrase = get_password();
-    if (ssh_pki_import_privkey_file(privkeyfile,passphrase,0,0,&key) != SSH_OK) { // todo handle passphrase
-	fprintf(stderr,"Failed to import privkey file\n");
-	return key;
+    char* passphrase = malloc(RAD_BUFSIZ);
+    char* pw_file = malloc(strlen(rad_home)+13);
+    sprintf(pw_file,"%s/.pw/radicle",rad_home);
+    FILE* f = 0;
+    if (password_loaded()) {
+	f = fopen(pw_file,"r");
+	if (!f) {
+	    fprintf(stderr,"Can't open password file for reading\n");
+	    return 1;
+	}
+	if (!fgets(passphrase,RAD_BUFSIZ,f)) {
+	    fprintf(stderr,"Can't read passphrase from password file\n");
+	    return 1;
+	}
+	rad_rstrip_nl(passphrase);
     }
-    return key;
+    else {
+	printf("? passphrase: ");
+	passphrase = get_password();
+	f = fopen(pw_file,"w");
+	if (!f) {
+	    fprintf(stderr,"Can't open password file for reading\n");
+	    return 1;
+	}
+	if (fputs(passphrase,f)==EOF) {
+	    fprintf(stderr,"Failed to put password in password file\n");
+	    return 1;
+	}
+    }
+    fclose(f);
+    if (ssh_pki_import_privkey_file(privkeyfile,passphrase,0,0,key) != SSH_OK) { // todo handle passphrase
+	fprintf(stderr,"Failed to import privkey file (check passphrase)\n");
+	return 1;
+    }
+    memset(passphrase,0,RAD_BUFSIZ);
+    return 0;
 }
 
 bool profile_init (const char* alias, const char* passphrase, const uint8_t* seed) {
@@ -152,7 +180,7 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     strcat(keydir,"/keys");
 
     if (access(keydir,F_OK)) {
-	if (mkdir(keydir,0755)) {
+	if (mkdir(keydir,0700)) {
 	    fprintf(stderr,"Can't create keys directory\n");
 	    free(rad_home);
 	    free(keydir);
@@ -197,6 +225,28 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	return false;
     }
 
+    // add password to password file
+    
+    char* pw_dir = malloc(strlen(rad_home)+5);
+    sprintf(pw_dir,"%s/.pw",rad_home);
+    if (access(pw_dir,F_OK)) {
+	if (mkdir(pw_dir,0700)) {
+	    fprintf(stderr,"Can't create password directory\n");
+	    return false;
+	}
+    }
+    char* pw_file = malloc(strlen(pw_dir)+9);
+    sprintf(pw_file,"%s/radicle",pw_dir);
+    f = fopen(pw_file,"w");
+    if (!f) {
+	fprintf(stderr,"Can't open password file for reading\n");
+	return 1;
+    }
+    if (fputs(passphrase,f)==EOF) {
+	fprintf(stderr,"Failed to put password in password file\n");
+	return 1;
+    }
+    
     uint8_t* pubkey_raw = 0;
     rc = ssh_pki_get_pubkey_raw(key,&pubkey_raw);
     if (rc != SSH_OK) {
@@ -281,4 +331,16 @@ Storage profile_get_storage () {
     strcat(si.email,si.name);
     s.info = si;
     return s;
+}
+
+bool password_loaded() {
+    const char* rad_home = get_rad_home();
+    if (rad_home) {
+	char* pwfile = malloc(strlen(rad_home)+13);
+	sprintf(pwfile,"%s/.pw/radicle",rad_home);
+	if (!access(pwfile,F_OK)) {
+	    return true;
+	}
+    }
+    return false;
 }

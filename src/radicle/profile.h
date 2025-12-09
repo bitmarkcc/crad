@@ -16,8 +16,10 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 
 Pubkey profile_get_pubkey ();
 
-ssh_key profile_get_privkey ();
+int profile_get_privkey (ssh_key* key);
 
 Storage profile_get_storage ();
+
+bool password_loaded ();
 
 #endif
