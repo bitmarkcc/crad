@@ -6,6 +6,7 @@
 
 #include <push.h>
 #include <util.h>
+#include <profile.h>
 
 int refspec_parse (char** src, char** dst, bool* force, const char* refspec) {
     if (!refspec) return 1;
@@ -35,7 +36,7 @@ int refspec_parse (char** src, char** dst, bool* force, const char* refspec) {
     return 0;
 }
 
-int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* did_raw) {
+int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* did_raw, json_object* identity_doc) {
 
     char* src = 0;
     char* dst = 0;
@@ -75,13 +76,15 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
     char* src_full = strdup(buf);
         
     // Add the namespace prefix to the dst if needed
+
     size_t len_namespace_prefix = 17+strlen(did_raw);
-    char* namespace_prefix = malloc(len_namespace_prefix);
+    char* namespace_prefix = malloc(len_namespace_prefix+1);
     sprintf(namespace_prefix,"refs/namespaces/%s/",did_raw);
-    char* dst_full = strdup(dst);
+    char* dst_full = malloc(len_namespace_prefix+strlen(dst)+1);
     if (strlen(dst) < 16+strlen(did_raw) || strcmp(rad_substr(dst,0,len_namespace_prefix),namespace_prefix)) {
 	sprintf(dst_full,"%s%s",namespace_prefix,dst);
     }
+    
     //fprintf(stderr,"dst_full %s\n",dst_full);
     char* refspec_full = malloc(strlen(src_full)+strlen(dst_full)+3);
     if (force)
@@ -89,9 +92,41 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
     else
 	sprintf(refspec_full,"%s:%s",src_full,dst_full);
 
+    char* refspec_canon = malloc(strlen(src_full)+strlen(dst)+3);
+    if (force)
+	sprintf(refspec_canon,"+%s:%s",src_full,dst);
+    else
+	sprintf(refspec_canon,"%s:%s",src_full,dst);
+
     const char* repo_path = git_repository_workdir(repo);
     
     //fprintf(stderr,"for send-pack repo_path %s rrepo_path %s refspec %s\n",repo_path,rrepo_path,refspec_full);
+
+
+    //get default branch and delegate for this repo
+    char* default_branch = 0;
+    char* delegate = 0;
+    json_object_object_foreach(identity_doc,key,val) {
+	if (!strcmp(key,"payload")) {
+	    json_object_object_foreach(val,key2,val2) {
+		if (!strcmp(key2,"xyz.radicle.project")) {
+		    json_object_object_foreach(val2,key3,val3) {
+			if (!strcmp(key3,"defaultBranch"))
+			    default_branch = rad_strip('"',json_object_to_json_string(val3));
+		    }
+		}
+	    }
+	}
+	else if (!strcmp(key,"delegates")) {
+	    json_object* delegate_obj = json_object_array_get_idx(val,0);
+	    if (!delegate_obj) {
+		fprintf(stderr,"Can't find the delegates array object\n");
+		return 1;
+	    }
+	    delegate = rad_strip('"',json_object_to_json_string(delegate_obj));
+	}
+    }
+    //fprintf(stderr,"default_branch %s delegate %s\n",default_branch,delegate);
     
     if (delete) { // todo implement push --delete
 	fprintf(stderr,"delete a ref (to implement)\n");
@@ -116,7 +151,30 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	argv[6] = 0;
 
 	if (exec_command("git",argv)) {
-	    fprintf(stderr,"git command failed\n");
+	  fprintf(stderr,"git command failed\n");
+	}
+	
+	// if dst branch matches the default branch, and did matches the delegate, push to the canonical ref
+	size_t len_default_branch = strlen(default_branch);
+	fprintf(stderr,"dst %s substring %s\n",dst,rad_substr(dst,-len_default_branch,len_default_branch));
+	if (!strcmp(rad_substr(dst,-len_default_branch,len_default_branch),default_branch)) {
+	  fprintf(stderr,"dst branch matches default branch\n");
+	  if (!strcmp(delegate+8,did_raw)) {
+	      fprintf(stderr,"delegate matches current signer\n");
+	      //make sure current signer controls the privkey
+	      Pubkey pubkey_from_privkey = profile_get_pubkey_from_privkey();
+	      if (!pubkey_from_privkey.bytes) {
+		  fprintf(stderr,"Failed to get pubkey from privkey\n");
+		  return 1;
+	      }
+	      const char* did_from_privkey = pubkey_to_did(pubkey_from_privkey.bytes)+8;
+	      if (!strcmp(did_raw,did_from_privkey)) {
+		  argv[5] = strdup(refspec_canon);
+		  if (exec_command("git",argv)) {
+		      fprintf(stderr,"git command failed\n");
+		  }
+	      }
+	  }
 	}
 
 	// sign refs

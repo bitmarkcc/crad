@@ -3,10 +3,9 @@
 
 #include <list.h>
 #include <storage.h>
-#include <repo.h>
 #include <util.h>
 
-int list_for_push (Storage storage, RadRepo rrepo, const char* did_raw) {
+int list_for_push (RadRepo rrepo, const char* did_raw) {
     char buf [HEXSIZ];
     git_reference_iterator* it = 0;
     char glob [128];
@@ -33,6 +32,62 @@ int list_for_push (Storage storage, RadRepo rrepo, const char* did_raw) {
     return 0;
 }
 
-int list_for_fetch () {
-    return 1;
+int list_for_fetch (RadRepo rrepo, const char* did_raw) {
+    char buf[HEXSIZ];
+    git_reference_iterator* it = 0;
+    if (did_raw) {
+	char glob[128];
+	sprintf(glob,"refs/namespaces/%s/*",did_raw);
+	if (git_reference_iterator_glob_new(&it,rrepo.repo,glob)) {
+	    fprintf(stderr,"Failed to create glob iterator\n");
+	    return 1;
+	}
+	const char* name = 0;
+	int ret = 0;
+	while (!(ret = git_reference_next_name(&name,it))) {
+	    Oid oid;
+	    git_reference_name_to_id(&oid,rrepo.repo,name);
+	    char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
+	    char* short_name = rad_substr(name,17+strlen(did_raw),0); // remove the refs/namespaces/<did>/ part
+	    printf("%s %s\n",oid_str,short_name);
+	}
+	if (ret != GIT_ITEROVER) {
+	    fprintf(stderr,"Error iterating over glob reference names\n");
+	    return 1;
+	}
+    }
+    else {
+	git_reference* ref = 0;
+	if (git_repository_head(&ref,rrepo.repo)) {
+	    fprintf(stderr,"Error retrieving the reference pointed at by HEAD\n");
+	    return 1;
+	}
+	const char* refname = git_reference_name(ref);
+	printf("@%s HEAD\n",refname);
+	//fprintf(stderr,"list print @%s HEAD\n",refname);
+	char* globs [2] = {"refs/heads/*","refs/tags/*"};
+	for (int i=0; i<2; i++) {
+	    if (git_reference_iterator_glob_new(&it,rrepo.repo,globs[i])) {
+		fprintf(stderr,"Failed to create glob iterator\n");
+		return 1;
+	    }
+	    const char* name = 0;
+	    int ret = 0;
+	    while (!(ret = git_reference_next_name(&name,it))) {
+		Oid oid;
+		git_reference_name_to_id(&oid,rrepo.repo,name);
+		char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
+		if (!strcmp(rad_substr(name,0,10),"refs/heads") || !strcmp(rad_substr(name,0,9),"refs/tags")) {
+		    printf("%s %s\n",oid_str,name);
+		    //fprintf(stderr,"list print %s %s\n",oid_str,name);
+		}
+	    }
+	    if (ret != GIT_ITEROVER) {
+		fprintf(stderr,"Error iterating over glob reference names\n");
+		return 1;
+	    }   
+	}
+    }
+
+    return 0;
 }

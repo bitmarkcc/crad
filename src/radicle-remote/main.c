@@ -27,7 +27,7 @@ int parse_url (char** rid_str, char** did_raw, const char* url) {
     }
     url += 6;
     size_t len = strlen(url);
-    *rid_str = malloc(len);
+    *rid_str = malloc(len+1);
     *did_raw = 0;
     size_t i = 0;
     while (*url && *url != '/') {
@@ -48,6 +48,42 @@ int parse_url (char** rid_str, char** did_raw, const char* url) {
 	(*did_raw)[i] = 0;
     }
     return 0;
+}
+
+json_object* get_identity_document (RadRepo rrepo) {
+    Oid oid;
+    if (git_reference_name_to_id(&oid,rrepo.repo,"refs/rad/id")) {
+	fprintf(stderr,"Failed to get oid of reference name\n");
+	return 0;
+    }
+    git_commit* commit = 0;
+    if (git_commit_lookup(&commit,rrepo.repo,&oid)) {
+	fprintf(stderr,"Failed to lookup commit from git repo\n");
+	return 0;
+    }
+    git_tree* tree = 0;
+    if (git_commit_tree(&tree,commit)) {
+	fprintf(stderr,"Failed to get tree associated with a git commit\n");
+	return 0;
+    }
+    git_tree_entry* tree_entry = 0;
+    if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
+	fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the rad/id ref\n");
+	return 0;
+    }
+    Oid* poid = git_tree_entry_id(tree_entry);
+    if (!poid) {
+	fprintf(stderr,"Can't find oid of git tree entry\n");
+	return 0;
+    }
+    oid = *poid;
+    git_blob* blob = 0;
+    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
+	fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
+	return 0;
+    }
+    uint8_t* blob_content = git_blob_rawcontent(blob);
+    return json_tokener_parse((char*)blob_content);
 }
 
 int main (int argc, char** argv)  {
@@ -87,9 +123,10 @@ int main (int argc, char** argv)  {
 	fprintf(stderr,"Failed to open git repository at path %s\n",repo_path);
 	return 1;
     }
-    
-    char request [RAD_BUFSIZ2];
 
+    json_object* identity_doc = get_identity_document(rrepo);
+    if (!identity_doc) return 1;    
+    char request [RAD_BUFSIZ2];
     while (1) {
 	rad_get_input(request,RAD_BUFSIZ2);
 	//fprintf(stderr,"request: %s\n",request);
@@ -101,7 +138,7 @@ int main (int argc, char** argv)  {
 	else if (request_len>3 && !strcmp(rad_substr(request,0,4),"push")) {
 	    char* refspec = rad_substr(request,5,0);
 	    //fprintf(stderr,"refspec %s\n",refspec);
-	    if (push_run(refspec,storage,rrepo,did_raw)) {
+	    if (push_run(refspec,storage,rrepo,did_raw,identity_doc)) {
 		fprintf(stderr,"Failed to push %s\n",refspec);
 		return 1;
 	    }
@@ -123,17 +160,17 @@ int main (int argc, char** argv)  {
 	}
 	else if (request_len>3 && !strcmp(rad_substr(request,0,4),"list")) {
 	    if (request_len>12 && !strcmp(rad_substr(request,5,8),"for-push")) {
-		if (list_for_push(storage,rrepo,did_raw)) {
+		if (list_for_push(rrepo,did_raw)) {
 		    return 1;
 		}
 		printf("\n");
 		fflush(stdout);
 	    }
 	    else if (!strcmp(request,"list")) {
-		if (list_for_fetch()) {
+		if (list_for_fetch(rrepo,did_raw)) {
 		    return 1;
 		}
-		printf("ok\n");
+		printf("\n");
 		fflush(stdout);
 	    }
 	    else {

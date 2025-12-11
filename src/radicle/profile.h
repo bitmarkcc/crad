@@ -16,6 +16,8 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 
 Pubkey profile_get_pubkey ();
 
+Pubkey profile_get_pubkey_from_privkey ();
+
 int profile_get_privkey (ssh_key* key);
 
 Storage profile_get_storage ();

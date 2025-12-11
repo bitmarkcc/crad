@@ -231,8 +231,10 @@ char* get_password () {
 }
 
 char* rad_substr (const char* str, int start, int len) {
-    if (start < 0 || len < 0) return 0;
+    if (len < 0) return 0;
     int lenstr = strlen(str);
+    if (start < 0) start = lenstr+start;
+    if (start < 0) start = 0;
     if (start + len > lenstr) return 0;
     if (!len) len = lenstr;
     char* out = malloc(len+1);

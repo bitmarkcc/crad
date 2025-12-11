@@ -3,7 +3,6 @@
 
 #include <key.h>
 #include <util.h>
-#include <project.h>
 #include <id.h>
 #include <repo.h>
 
