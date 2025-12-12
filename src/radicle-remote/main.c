@@ -7,6 +7,7 @@
 #include <git.h>
 #include <push.h>
 #include <list.h>
+#include <fetch.h>
 
 const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
 
@@ -71,7 +72,7 @@ json_object* get_identity_document (RadRepo rrepo) {
 	fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the rad/id ref\n");
 	return 0;
     }
-    Oid* poid = git_tree_entry_id(tree_entry);
+    const Oid* poid = git_tree_entry_id(tree_entry);
     if (!poid) {
 	fprintf(stderr,"Can't find oid of git tree entry\n");
 	return 0;
@@ -82,7 +83,7 @@ json_object* get_identity_document (RadRepo rrepo) {
 	fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
 	return 0;
     }
-    uint8_t* blob_content = git_blob_rawcontent(blob);
+    const uint8_t* blob_content = git_blob_rawcontent(blob);
     return json_tokener_parse((char*)blob_content);
 }
 
@@ -177,6 +178,14 @@ int main (int argc, char** argv)  {
 		printf("unsupported\n");
 		fflush(stdout);
 	    }
+	}
+	else if (request_len>4 && !strcmp(rad_substr(request,0,5),"fetch")) {
+	    char* oid_str = rad_substr(request,6,40);
+	    char* refstr = rad_substr(request,46,0);
+	    if (fetch_run(storage,rrepo,did_raw,oid_str,refstr)) {
+		return 1;
+	    }
+	    fflush(stdout);
 	}
 	else if (!request_len) {
 	    return 0;

@@ -157,6 +157,13 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
 	fprintf(stderr,"Failed to set git reference\n");
 	return 1;
     }
+
+    // Set upstream
+
+    if (rad_repo_set_upstream(repo,default_branch)) {
+	fprintf(stderr,"Failed to set upstream\n");
+	return 1;
+    }
     
     return 0;
 }

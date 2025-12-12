@@ -42,4 +42,6 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
 
 Oid rad_repo_sign_refs (RadRepo rrepo, Pubkey signer);
 
+int rad_repo_set_upstream (git_repository* repo, const char* branch);
+
 #endif

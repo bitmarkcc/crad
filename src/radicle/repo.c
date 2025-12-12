@@ -366,3 +366,21 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 
     return oid;
 }
+
+int rad_repo_set_upstream (git_repository* repo, const char* branch) {
+    git_config* config = 0;
+    if (git_repository_config(&config,repo)) {
+	fprintf(stderr,"Failed to get the config file for the git repository\n");
+	return 1;
+    }
+
+    char* branch_remote = malloc(strlen(branch)+15);
+    sprintf(branch_remote,"branch.%s.remote",branch);
+    char* branch_merge = malloc(strlen(branch)+14);
+    sprintf(branch_merge,"branch.%s.merge",branch);
+    char* branch_merge_value = malloc(12+strlen(branch));
+    sprintf(branch_merge_value,"refs/heads/%s",branch);
+    
+    git_config_set_multivar(config,branch_remote,".*","rad");
+    git_config_set_multivar(config,branch_merge,".*",branch_merge_value);
+}

@@ -152,15 +152,16 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 
 	if (exec_command("git",argv)) {
 	  fprintf(stderr,"git command failed\n");
+	  return 1;
 	}
 	
 	// if dst branch matches the default branch, and did matches the delegate, push to the canonical ref
 	size_t len_default_branch = strlen(default_branch);
-	fprintf(stderr,"dst %s substring %s\n",dst,rad_substr(dst,-len_default_branch,len_default_branch));
+	//fprintf(stderr,"dst %s substring %s\n",dst,rad_substr(dst,-len_default_branch,len_default_branch));
 	if (!strcmp(rad_substr(dst,-len_default_branch,len_default_branch),default_branch)) {
-	  fprintf(stderr,"dst branch matches default branch\n");
+	    //fprintf(stderr,"dst branch matches default branch\n");
 	  if (!strcmp(delegate+8,did_raw)) {
-	      fprintf(stderr,"delegate matches current signer\n");
+	      //fprintf(stderr,"delegate matches current signer\n");
 	      //make sure current signer controls the privkey
 	      Pubkey pubkey_from_privkey = profile_get_pubkey_from_privkey();
 	      if (!pubkey_from_privkey.bytes) {
@@ -172,6 +173,7 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 		  argv[5] = strdup(refspec_canon);
 		  if (exec_command("git",argv)) {
 		      fprintf(stderr,"git command failed\n");
+		      return 1;
 		  }
 	      }
 	  }
