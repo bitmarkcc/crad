@@ -60,6 +60,12 @@ DocumentEncoding document_encode (Document doc) {
 	json_object_object_add(obj,"version",json_object_new_int(IDENTITY_VERSION));
     }
 
+    if (doc.visibility == VIS_PRIVATE) {
+	json_object* visibility_obj = json_object_new_object();
+	json_object_object_add(visibility_obj,"type",json_object_new_string("private"));
+	json_object_object_add(obj,"visibility",visibility_obj);
+    }
+
     char* obj_str = rad_remove_space_json(json_object_to_json_string(obj));
     
     encoding.n_bytes = strlen(obj_str);

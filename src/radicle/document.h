@@ -17,7 +17,7 @@ typedef struct {
     size_t n_delegates;
     Pubkey* delegates;
     size_t threshold;
-    bool visibility;
+    Visibility visibility;
 } Document;
 
 typedef struct {
