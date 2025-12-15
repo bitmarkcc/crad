@@ -4,6 +4,7 @@
 #include <version.h>
 #include <commands/auth.h>
 #include <commands/init.h>
+#include <commands/clone.h>
 
 void print_error(const char *msg) {
     fprintf(stderr, "rad: %s\n", msg);
@@ -103,6 +104,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"init")) {
 		return init_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"clone")) {
+		return clone_run(subcommand);
 	    }
 	}
 	break;

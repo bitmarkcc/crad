@@ -10,6 +10,8 @@
 
 char* get_rad_home ();
 
+char* get_rad_node_home ();
+
 bool profile_load ();
 
 bool profile_init (const char* alias, const char* passphrase, const uint8_t* seed);

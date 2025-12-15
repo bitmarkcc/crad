@@ -200,12 +200,12 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	    return 1;
 	}
 	Oid oid_parent = {{0}};
-	git_commit* parent;
-	if (git_reference_name_to_id(&oid_parent,rrepo.repo,update_ref)) {
-	    fprintf(stderr,"Failed to get oid of git reference name\n");
-	    return 1;
+	git_commit* parent = 0;
+	if (git_reference_name_to_id(&oid_parent,rrepo.repo,update_ref)) { //todo check if this is ok
+	    //fprintf(stderr,"Failed to get oid of git reference name\n");
+	    // no error printed because it may be the first commit for the did namespace
 	}
-	if (git_commit_lookup(&parent,rrepo.repo,&oid_parent)) {
+	else if (git_commit_lookup(&parent,rrepo.repo,&oid_parent)) {
 	    fprintf(stderr,"Failed to lookup git commit\n");
 	    return 1;
 	}

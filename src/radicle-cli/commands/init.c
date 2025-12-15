@@ -13,7 +13,11 @@
 
 int init_run (Command c) {
     if (!profile_load()) {
-	fprintf(stderr,"No profile is loaded. Run `rad auth` to load or create one.\n");
+	fprintf(stderr,"No profile is loaded. Run `crad auth` to create one\n");
+	return 1;
+    }
+    else if (!password_loaded()) {
+	fprintf(stderr,"You must be authenticated first. Run `crad auth` to authenticate\n");
 	return 1;
     }
     else {

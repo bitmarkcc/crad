@@ -11,7 +11,25 @@
 #include <id.h>
 #include <util.h>
 
-char* get_rad_home() {
+char* get_rad_home () {
+    char* rad_home = 0;
+    char* env_rad_home = getenv("CRAD_HOME");
+    if (env_rad_home) {
+	rad_home = strdup(env_rad_home);
+    }
+    else {
+	char* env_home = getenv("HOME");
+	if (env_home) {
+	    rad_home = malloc(strlen(env_home)+11);
+	    strcpy(rad_home,env_home);
+	    strcat(rad_home,"/.cradicle");
+	}
+    }
+    if (!rad_home) fprintf(stderr,"Can't find Radicle Home directory\n");
+    return rad_home;
+}
+
+char* get_rad_node_home () {
     char* rad_home = 0;
     char* env_rad_home = getenv("RAD_HOME");
     if (env_rad_home) {
@@ -20,9 +38,9 @@ char* get_rad_home() {
     else {
 	char* env_home = getenv("HOME");
 	if (env_home) {
-	    rad_home = malloc(strlen(env_home)+10);
+	    rad_home = malloc(strlen(env_home)+11);
 	    strcpy(rad_home,env_home);
-	    strcat(rad_home,"/.radicle");
+	    strcat(rad_home,"/.cradicle");
 	}
     }
     if (!rad_home) fprintf(stderr,"Can't find Radicle Home directory\n");

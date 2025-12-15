@@ -48,7 +48,7 @@ int auth_init() {
     }
     printf("Creating your Ed25519 keypair...\n");
     uint8_t* seed = 0;
-    char* env_seed = getenv("RAD_KEYGEN_SEED");
+    char* env_seed = getenv("CRAD_KEYGEN_SEED");
     if (env_seed && strlen(env_seed)==64) {
 	seed = rad_hex_to_uchar(env_seed);
     }
