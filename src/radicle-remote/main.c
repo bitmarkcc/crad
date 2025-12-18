@@ -8,6 +8,7 @@
 #include <push.h>
 #include <list.h>
 #include <fetch.h>
+#include <cob/identity.h>
 
 const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
 
@@ -51,42 +52,6 @@ int parse_url (char** rid_str, char** did_raw, const char* url) {
     return 0;
 }
 
-json_object* get_identity_document (RadRepo rrepo) {
-    Oid oid;
-    if (git_reference_name_to_id(&oid,rrepo.repo,"refs/rad/id")) {
-	fprintf(stderr,"Failed to get oid of reference name\n");
-	return 0;
-    }
-    git_commit* commit = 0;
-    if (git_commit_lookup(&commit,rrepo.repo,&oid)) {
-	fprintf(stderr,"Failed to lookup commit from git repo\n");
-	return 0;
-    }
-    git_tree* tree = 0;
-    if (git_commit_tree(&tree,commit)) {
-	fprintf(stderr,"Failed to get tree associated with a git commit\n");
-	return 0;
-    }
-    git_tree_entry* tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
-	fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the rad/id ref\n");
-	return 0;
-    }
-    const Oid* poid = git_tree_entry_id(tree_entry);
-    if (!poid) {
-	fprintf(stderr,"Can't find oid of git tree entry\n");
-	return 0;
-    }
-    oid = *poid;
-    git_blob* blob = 0;
-    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
-	fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
-	return 0;
-    }
-    const uint8_t* blob_content = git_blob_rawcontent(blob);
-    return json_tokener_parse((char*)blob_content);
-}
-
 int main (int argc, char** argv)  {
     
     char* url = 0;
@@ -125,7 +90,7 @@ int main (int argc, char** argv)  {
 	return 1;
     }
 
-    json_object* identity_doc = get_identity_document(rrepo);
+    json_object* identity_doc = get_identity_document(rrepo.repo);
     if (!identity_doc) return 1;    
     char request [RAD_BUFSIZ2];
     while (1) {

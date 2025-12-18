@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <print.h>
 
 typedef enum {
     CMD_OTHER,

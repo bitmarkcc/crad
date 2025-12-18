@@ -5,6 +5,7 @@
 #include <commands/auth.h>
 #include <commands/init.h>
 #include <commands/clone.h>
+#include <commands/validate.h>
 
 void print_error(const char *msg) {
     fprintf(stderr, "rad: %s\n", msg);
@@ -107,6 +108,12 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"clone")) {
 		return clone_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"validate")) {
+		return validate_run(subcommand);
+	    }
+	    else {
+		eprintf("invalid command (%s)",exe);
 	    }
 	}
 	break;

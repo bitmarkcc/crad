@@ -43,4 +43,6 @@ char* get_password ();
 
 char* rad_substr (const char* str, int start, int len);
 
+char* rad_indent_str (const char* str);
+
 #endif

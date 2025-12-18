@@ -6,6 +6,9 @@
 #include <id.h>
 #include <git.h>
 #include <util.h>
+#include <print.h>
+
+const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
 
 RadRepo rad_repo_default () {
     RadRepo rrepo;
@@ -56,7 +59,6 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
     }
     
     char commit_str [4096]; //todo set right size
-    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf [HEXSIZ];
     git_signature* gitsig = 0;
     if (git_signature_default(&gitsig,rrepo.repo)) {
@@ -99,7 +101,7 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
     strcat(commit_str,time_offset(gitsig->when.offset));
     strcat(commit_str,"\n");
     for (size_t i=0; i<n_headers; i++) {
-	strcat(commit_str,headers[i]);
+	strcat(commit_str,rad_indent_str(headers[i]));
 	strcat(commit_str,"\n");
     }
     strcat(commit_str,"\n");
@@ -383,4 +385,82 @@ int rad_repo_set_upstream (git_repository* repo, const char* branch) {
     
     git_config_set_multivar(config,branch_remote,".*","rad");
     git_config_set_multivar(config,branch_merge,".*",branch_merge_value);
+}
+
+Oid rad_repo_validate (const char* path) {
+    Oid rid = {{0}};
+    char buf [HEXSIZ];
+    //check local repo with git fsck
+    char* argv [5];
+    argv[0] = "git";
+    argv[1] = "-C";
+    argv[2] = strdup(path);
+    argv[3] = "fsck";
+    argv[4] = 0;
+    if (exec_command("git",argv)) {
+	eprintf("git fsck command failed on %s",path);
+	return rid;
+    }
+
+    // get candidate rid from the git config for the rad remote
+    git_repository* repo = 0;
+    if (git_repository_open(&repo,path)) {
+	eprintf("failed to open git repository at %s",path);
+	return rid;
+    }
+    git_config* config = 0;
+    if (git_repository_config(&config,repo)) {
+	eprintf("failed to get the config file for the git repository at %s\n",path);
+	return rid;
+    }
+    git_config_iterator* it = 0;
+    if (git_config_multivar_iterator_new(&it,config,"remote.rad.url",0)) {
+	eprintf("failed to get git config iterator");
+	return rid;
+    }
+    git_config_entry* entry = 0;
+    Oid rid_candidate = {{0}};
+    while (!git_config_next(&entry,it)) {
+	rid_candidate = rid_to_oid(strdup(entry->value)+6);
+	break; // todo assume only one entry?
+    }
+    const char* rid_candidate_str = oid_to_rid(rid_candidate);
+    iprintf("rid_candidate is %s",rid_candidate_str);
+
+    // setup rad repo struct and get the radicle storage path for the candidate rid
+    RadRepo rrepo;
+    rrepo.rid = rid_candidate;
+    git_repository* repo_rad = 0;
+    Storage storage = profile_get_storage();
+    char* path_rad = malloc(strlen(storage.path)+64);
+    sprintf(path_rad,"%s/%s",storage.path,rid_candidate_str);
+
+    // run git fsck on the rad repo
+    argv[2] = strdup(path_rad);
+    if (exec_command("git",argv)) {
+	eprintf("git fsck command failed on %s",path_rad);
+	return rid;
+    }
+
+    // open the git repo associated with the rad repo and set the RadRepo repo property
+    if (git_repository_open(&repo_rad,path_rad)) {
+	eprintf("failed to open git repository at %s",path_rad);
+	return rid;
+    }
+    rrepo.repo = repo_rad;
+
+    Oid rid_from_id_doc = get_root_identity_doc_oid(rrepo.repo);
+    iprintf("rid_from_id_doc is %s",git_oid_tostr(buf,HEXSIZ,&rid_from_id_doc));
+
+    if (!git_oid_equal(&rid_from_id_doc,&rid_candidate)) {
+	eprintf("rid from id doc doesn't match the candidate rid");
+	return rid;
+    }
+
+    // check if signature for sigrefs is valid
+    
+    
+    rid = rid_candidate;
+    iprintf("repo valid with rid %s",git_oid_tostr(buf,HEXSIZ,&rid));
+    return rid;
 }

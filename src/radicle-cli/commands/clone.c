@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include <commands/clone.h>
 #include <command.h>
 #include <profile.h>
 

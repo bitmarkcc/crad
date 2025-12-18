@@ -83,7 +83,7 @@ Pubkey profile_get_pubkey() {
     char* pubkeyfile = malloc(strlen(keydir)+13);
     strcpy(pubkeyfile,keydir);
     strcat(pubkeyfile,"/radicle.pub");
-    ssh_key key;
+    ssh_key key = 0;
     if (ssh_pki_import_pubkey_file(pubkeyfile,&key) != SSH_OK) {
 	fprintf(stderr,"Failed to import pubkey file\n");
 	return pubkey;
@@ -384,10 +384,10 @@ Storage profile_get_storage () {
     strcat(s.path,"/storage");
     StorageInfo si;
     si.name = profile_get_alias(rad_home);
-    si.email = malloc(strlen(si.name)*2+2);
+    si.email = malloc(strlen(si.name)+2+128);
     strcpy(si.email,si.name);
     strcat(si.email,"@");
-    strcat(si.email,si.name);
+    strcat(si.email,pubkey_to_did(profile_get_pubkey().bytes)+8);
     s.info = si;
     return s;
 }

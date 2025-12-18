@@ -195,7 +195,22 @@ int exec_command (const char* file, char* const argv []) {
 	}   
 	return execvp(file,argv);
     default:
-	waitpid(pid,0,0);
+	int status;
+	if (waitpid(pid,&status,0)<0) {
+	    fprintf(stderr,"waitpid failed\n");
+	    return 1;
+	}
+	if (WIFEXITED(status)) {
+	    int es = WEXITSTATUS(status);
+	    if (es) {
+		fprintf(stderr,"%s command exit status is %d\n",argv[0],es);
+		return 1;
+	    }
+	}
+	else {
+	    fprintf(stderr,"%s command ended abnormaly\n",argv[0]);
+	}
+	
 	return 0;
     }
 }
@@ -242,5 +257,25 @@ char* rad_substr (const char* str, int start, int len) {
 	out[i] = str[start+i];
     }
     out[len] = 0;
+    return out;
+}
+
+char* rad_indent_str (const char *str) { // add a space after each newline
+    char* out = malloc(2*strlen(str)+1);
+    char* out_it = out;
+    bool space_next = false;
+    while (*str) {
+	if (space_next) {
+	    *out_it = ' ';
+	    out_it++;
+	    space_next = false;
+	}
+	if (*str == '\n') {
+	    space_next = true;
+	}
+	*out_it = *str;
+	str++;
+	out_it++;
+    }
     return out;
 }

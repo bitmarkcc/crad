@@ -14,7 +14,7 @@ int key_sign (char** out_raw, char** out_full, const Pubkey signer, const uint8_
 	return 1;
     }
     ssh_string sig_raw = 0;
-    if (sshsig_sign(inp,len,privkey,0,"file",SSHSIG_DIGEST_SHA2_256,&sig,&sig_raw) != SSH_OK) {
+    if (sshsig_sign(inp,len,privkey,0,"radicle",SSHSIG_DIGEST_SHA2_256,&sig,&sig_raw) != SSH_OK) {
 	fprintf(stderr,"Failed to sign the data with the private key\n");
 	return 1;
     }
@@ -34,7 +34,7 @@ int key_sign_raw_unencoded (uint8_t** out, size_t* out_len, const Pubkey signer,
 	return 1;
     }
     ssh_string sig_raw = 0;
-    if (sshsig_sign(inp,len,privkey,0,"file",SSHSIG_DIGEST_SHA2_256,&sig,&sig_raw) != SSH_OK) {
+    if (sshsig_sign(inp,len,privkey,0,"radicle",SSHSIG_DIGEST_SHA2_256,&sig,&sig_raw) != SSH_OK) {
 	fprintf(stderr,"Failed to sign the data with the private key\n");
 	return 1;
     }

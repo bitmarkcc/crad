@@ -4,8 +4,11 @@
 #include <stdint.h>
 
 #include <id.h>
+#include <git2.h>
+#include <json-c/json.h>
 
 extern const uint32_t COB_VERSION;
+extern const size_t HEXSIZ;
 
 typedef enum {
     IDENTITY_ACTION_REVISION,
@@ -51,5 +54,7 @@ typedef struct {
 } Create;
 
 char* manifest_encode (Manifest manifest);
+json_object* get_identity_document (git_repository* repo);
+Oid get_root_identity_doc_oid (git_repository* repo);
 
 #endif
