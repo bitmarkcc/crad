@@ -45,4 +45,8 @@ char* rad_substr (const char* str, int start, int len);
 
 char* rad_indent_str (const char* str);
 
+uint8_t* rad_reverse_bytes (const uint8_t* bytes, size_t len);
+
+char* rad_str_with_line_size (const char* str, size_t n);
+
 #endif

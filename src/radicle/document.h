@@ -6,6 +6,8 @@
 #include <id.h>
 #include <repo.h>
 
+extern const size_t HEXSIZ;
+
 typedef enum {
     VIS_PUBLIC,
     VIS_PRIVATE

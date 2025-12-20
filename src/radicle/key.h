@@ -8,8 +8,12 @@ typedef struct {
     uint8_t* bytes;
 } Pubkey;
 
-int key_sign (char** out_raw, char** out_full, const Pubkey signer, const uint8_t* inp, size_t len);
+int key_sign_openssh (char** out_raw, char** out_full, const Pubkey signer, const uint8_t* inp, size_t len);
 
-int key_sign_raw_unencoded (uint8_t** out, size_t* n_out, const Pubkey signer, const uint8_t* inp, size_t len);
+int key_sign_bytes (uint8_t out [64], const Pubkey signer, const uint8_t* inp, size_t len);
+
+int key_sign_base58 (char** out, const Pubkey signer, const uint8_t* inp, size_t len);
+
+char* rad_sig_to_ssh_format (const uint8_t* sig_bytes, Pubkey signer);
 
 #endif

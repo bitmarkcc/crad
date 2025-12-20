@@ -84,6 +84,7 @@ char** rad_actions_to_json_strings (const IdentityAction* actions, size_t n) {
 		json_object_object_add(obj,"parent",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.parent)));
 	    json_object_object_add(obj,"signature",json_object_new_string(action.sig));
 	    json_object_object_add(obj,"title",json_object_new_string(action.title));
+	    json_object_object_add(obj,"type",json_object_new_string("revision"));
 	} //todo cover all cases for the action.type
 	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
     }
@@ -92,7 +93,7 @@ char** rad_actions_to_json_strings (const IdentityAction* actions, size_t n) {
 
 RepoEntry create_cob_identity (RadRepo rrepo, char* message, IdentityAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
     Oid* parents = rad_get_parents(actions,n_actions);
-    size_t n_parents = n_actions;
+    size_t n_parents = n_actions; // todo correct?
     char** contents = rad_actions_to_json_strings(actions,n_actions);
     Create create;
     create.type_name = "xyz.radicle.id";

@@ -8,7 +8,7 @@
 char* manifest_encode (Manifest manifest) {
     json_object* obj = json_object_new_object();
 
-    json_object_object_add(obj,"type_name",json_object_new_string(manifest.type_name));
+    json_object_object_add(obj,"typeName",json_object_new_string(manifest.type_name));
     json_object_object_add(obj,"version",json_object_new_int(manifest.version));
     
     return rad_remove_space_json(json_object_to_json_string(obj));
@@ -87,7 +87,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
     iprintf("signed data: %s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
     
     ssh_key signer = 0;
-    ssh_set_log_level(4);
+
     if (sshsig_verify(oid_tree.id,20,sig.ptr,"radicle",&signer)!=SSH_OK) {
 	eprintf("invalid signature");
 	return ret;

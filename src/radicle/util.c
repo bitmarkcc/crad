@@ -279,3 +279,31 @@ char* rad_indent_str (const char *str) { // add a space after each newline
     }
     return out;
 }
+
+uint8_t* rad_reverse_bytes (const uint8_t* bytes, size_t len) {
+    uint8_t* rbytes = malloc(len);
+    uint8_t* rbytes_it = rbytes;
+    for (int i=len-1; i>=0; i--) {
+	*rbytes_it = bytes[i];
+	rbytes_it++;
+    }
+    return rbytes;
+}
+
+char* rad_str_with_line_size (const char* str, size_t n) { // assume str has no newlines
+    char* out = malloc(2*strlen(str));
+    char* out_it = out;
+    size_t n_cur = 0;
+    while (*str) {
+	*out_it = *str;
+	out_it++;
+	n_cur++;
+	if (n_cur == n) {
+	    *out_it = '\n';
+	    out_it++;
+	    n_cur = 0;
+	}
+	str++;
+    }
+    return out;
+}

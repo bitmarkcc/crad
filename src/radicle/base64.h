@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
-uint8_t* decode_base64(const char* str, int max_ret_len);
+uint8_t* decode_base64 (const char* str, int max_ret_len);
+
+char* encode_base64 (const uint8_t* inp, size_t len);
 
 #endif

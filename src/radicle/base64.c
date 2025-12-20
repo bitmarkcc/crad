@@ -74,3 +74,52 @@ uint8_t* decode_base64 (const char* str, int max_ret_len) {
     //vch.push_back(*(it++));
     return it;
 }
+
+char* encode_base64 (const uint8_t* inp, size_t len) {
+    const uint8_t* end = inp+len;
+    // Skip & count leading zeroes.
+    int zeroes = 0;
+    int length = 0;
+    while (inp != end && *inp == 0) {
+        inp++;
+        zeroes++;
+    }
+    int inp_size = len-zeroes;
+    // Allocate enough space in big-endian base64 representation.
+    int size = inp_size * 4/3 + 1; // log(256) / log(64), rounded up.
+    
+    uint8_t* b64 = malloc(size);
+    memset(b64,0,size);
+    // Process the bytes.
+    while (inp != end) {
+        int carry = *inp;
+	int i = 0;
+        // Apply "b64 = b64 * 256 + ch".
+        for (uint8_t* it = b64+size-1; (carry != 0 || i < length) && (it != b64-1); it--, i++) {
+            carry += 256 * (*it);
+            *it = carry % 64;
+            carry /= 64;
+	    
+        }
+        assert(carry == 0);
+	length = i;
+	inp++;
+    }
+    
+    // Skip leading zeroes in base64 result.
+    uint8_t* it = b64 + (size - length);
+    while (it != b64+size && *it == 0) {
+        it++;
+    }
+
+    char* str = malloc(zeroes+(b64+size-it)+1);
+    memset(str,'1',zeroes);
+    str += zeroes;
+    char* str_it = str;
+    while (it != b64+size) {
+	*str_it++ = base64[*(it++)];
+    }
+    *str_it = 0;
+    free(b64);
+    return str;
+}

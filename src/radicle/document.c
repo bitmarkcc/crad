@@ -6,6 +6,8 @@
 #include <id.h>
 #include <cob.h>
 #include <key.h>
+#include <base58.h>
+#include <print.h>
 
 const uint32_t IDENTITY_VERSION = 1;
 
@@ -18,7 +20,6 @@ Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer)
     char refname [256];
     char reftarget [256];
     char reflogmsg [256];
-    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf[HEXSIZ];
     char* cob_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&re.oid));
     char* did_core = pubkey_to_did(signer.bytes)+8;
@@ -78,6 +79,6 @@ DocumentEncoding document_encode (Document doc) {
 DocumentEncoding document_sign (Document doc, Pubkey signer) {
     DocumentEncoding encoding = document_encode(doc);
     char* sig_full = 0;
-    key_sign(&encoding.sig,&sig_full,signer,encoding.oid.id,20);
+    key_sign_base58(&encoding.sig,signer,encoding.oid.id,20);
     return encoding;
 }

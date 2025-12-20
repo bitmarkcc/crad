@@ -194,16 +194,16 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
 	return re;
     }
 
-    char* sig_raw = 0;
-    char* sig_full = 0;
-    key_sign(&sig_raw,&sig_full,signer,oid.id,20);
+    uint8_t sig_bytes [64] = {0};
+    key_sign_bytes(sig_bytes,signer,oid.id,20);
+    const char* sig_ssh = rad_sig_to_ssh_format(sig_bytes,signer);
 
     oids_dedup(&related,&n_related);
     oids_sort(&related,n_related);
 
     char* header = malloc(2048); //todo set right size
     strcpy(header,"gpgsig ");
-    strcat(header,sig_full);
+    strcat(header,sig_ssh);
     char** headers = &header;
     size_t n_headers = 1;
     char** trailers = 0;
@@ -334,10 +334,9 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	return oid_ret;
     }
     const char* oid_refs_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_refs));
-    uint8_t* sig_raw = 0;
-    size_t sig_raw_len = 0;
-    key_sign_raw_unencoded(&sig_raw,&sig_raw_len,signer,refs_str,strlen(refs_str));
-    if (git_odb_write(&oid,odb,sig_raw,sig_raw_len,GIT_OBJECT_BLOB)) {
+    uint8_t sig_bytes [64] = {0};
+    key_sign_bytes(sig_bytes,signer,refs_str,strlen(refs_str));
+    if (git_odb_write(&oid,odb,sig_bytes,64,GIT_OBJECT_BLOB)) {
 	fprintf(stderr,"Failed to write sig to odb\n");
 	return oid_ret;
     }
@@ -451,12 +450,12 @@ Oid rad_repo_validate (const char* path) {
 
     Oid rid_from_id_doc = get_root_identity_doc_oid(rrepo.repo);
     iprintf("rid_from_id_doc is %s",git_oid_tostr(buf,HEXSIZ,&rid_from_id_doc));
-
+    
     if (!git_oid_equal(&rid_from_id_doc,&rid_candidate)) {
 	eprintf("rid from id doc doesn't match the candidate rid");
 	return rid;
     }
-
+    
     // check if signature for sigrefs is valid
     
     
