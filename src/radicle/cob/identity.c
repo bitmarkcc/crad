@@ -4,6 +4,7 @@
 #include <cob/identity.h>
 #include <util.h>
 #include <print.h>
+#include <key.h>
 
 char* manifest_encode (Manifest manifest) {
     json_object* obj = json_object_new_object();
@@ -83,31 +84,29 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	eprintf("failed to extract signature from commit");
 	return ret;
     }
-    iprintf("signature: %s",sig.ptr);
-    iprintf("signed data: %s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
-    
-    ssh_key signer = 0;
-
-    if (sshsig_verify(oid_tree.id,20,sig.ptr,"radicle",&signer)!=SSH_OK) {
-	eprintf("invalid signature");
-	return ret;
-    }
-    uint8_t* signer_raw = 0;
-    if (ssh_pki_get_pubkey_raw(signer,&signer_raw) != SSH_OK) {
-	eprintf("failed to get raw public key");
-	return ret;
-    }
-    iprintf("signer did is %s",pubkey_to_did(signer_raw));
-    
+    //iprintf("signature: %s",sig.ptr);
+    //iprintf("signed data: %s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
+            
     git_commit* parent = 0;
-    while (git_commit_parentcount(commit)) {
-	if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
-	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
+    do {
+	git_signature* gitsig = git_commit_committer(commit);
+	const char* email = gitsig->email;
+	Pubkey committer = {0};
+	committer.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
+	if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer)) {
+	    eprintf("failed to validate ssh signature");
 	    return ret;
 	}
-	commit = parent;
-	parent = 0;
-    }
+
+	if (git_commit_parentcount(commit)) {   
+	    if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
+		fprintf(stderr,"Failed to get tree associated with a git commit\n");
+		return ret;
+	    }
+	    commit = parent;
+	    parent = 0;
+	}
+    } while (git_commit_parentcount(commit));
     tree = 0;
     if (git_commit_tree(&tree,commit)) {
 	fprintf(stderr,"Failed to get tree associated with a git commit\n");

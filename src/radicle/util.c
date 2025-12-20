@@ -277,6 +277,7 @@ char* rad_indent_str (const char *str) { // add a space after each newline
 	str++;
 	out_it++;
     }
+    *out_it = 0;
     return out;
 }
 
@@ -291,7 +292,7 @@ uint8_t* rad_reverse_bytes (const uint8_t* bytes, size_t len) {
 }
 
 char* rad_str_with_line_size (const char* str, size_t n) { // assume str has no newlines
-    char* out = malloc(2*strlen(str));
+    char* out = malloc(2*strlen(str)+1);
     char* out_it = out;
     size_t n_cur = 0;
     while (*str) {
@@ -305,5 +306,31 @@ char* rad_str_with_line_size (const char* str, size_t n) { // assume str has no 
 	}
 	str++;
     }
+    *out_it = 0;
+    return out;
+}
+
+char* rad_email_get_domain (const char* emailaddr) {
+    if (!emailaddr) return 0;
+    while (*emailaddr) {
+	if (*emailaddr == '@') {
+	    emailaddr++;
+	    return strdup(emailaddr);
+	}
+	emailaddr++;
+    }
+}
+
+char* rad_str_remove_spaces (const char* str) {
+    char* out = malloc(strlen(str)+1);
+    char* out_it = out;
+    while (*str) {
+	if (!rad_is_space(*str)) {
+	    *out_it = *str;
+	    out_it++;
+	}
+	str++;
+    }
+    *out_it = 0;
     return out;
 }

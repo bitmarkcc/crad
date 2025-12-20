@@ -115,3 +115,34 @@ char* rad_sig_to_ssh_format (const uint8_t* sig_bytes, Pubkey signer) {
     sprintf(out,"-----BEGIN SSH SIGNATURE-----\n%s\n-----END SSH SIGNATURE-----",rad_str_with_line_size(ssh_sig_base64,70));
     return out;
 }
+
+int rad_sshsig_verify (const uint8_t* data, size_t n_data, const char* sshsig, Pubkey signer) {
+
+    size_t sshsiglen = strlen(sshsig);
+    char* sshsig_base64 = malloc(sshsiglen);
+    memcpy(sshsig_base64,sshsig+30,sshsiglen-58);
+    sshsig_base64[sshsiglen-58] = 0;
+    uint8_t* sshsig_bytes = decode_base64(rad_str_remove_spaces(sshsig_base64),177);
+    uint8_t sig_raw [64];
+    memcpy(sig_raw,sshsig_bytes+113,64);
+     
+    EVP_PKEY* okey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519,0,signer.bytes,32);
+
+    EVP_MD_CTX *mdctx = 0;
+
+    if(!(mdctx = EVP_MD_CTX_create())) goto err;
+    
+    if (EVP_DigestVerifyInit(mdctx,0,0,0,okey)!=1) {
+	eprintf("EVP_DigestVerifyInit failed");
+	goto err;
+    }
+    if (EVP_DigestVerify(mdctx,sig_raw,64,data,n_data)!=1) {
+	eprintf("EVP_DigestVerify failed");
+	goto err;
+    }
+
+    return 0;
+    
+ err:
+    return 1;    
+}

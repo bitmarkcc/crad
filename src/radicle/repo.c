@@ -460,6 +460,6 @@ Oid rad_repo_validate (const char* path) {
     
     
     rid = rid_candidate;
-    iprintf("repo valid with rid %s",git_oid_tostr(buf,HEXSIZ,&rid));
+    iprintf("repo valid with rid %s",oid_to_rid(rid));
     return rid;
 }

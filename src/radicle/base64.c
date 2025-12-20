@@ -41,6 +41,7 @@ uint8_t* decode_base64 (const char* str, int max_ret_len) {
     // Allocate enough space in big-endian base256 representation.
     int size = strlen(str) * 750 /1000 + 1; // log(64) / log(256), rounded up.
     uint8_t* b256 = malloc(size);
+    memset(b256,0,size);
     // Process the characters.
     static_assert(sizeof(map_base64) == 256); // guarantee not out of range
     while (*str && !rad_is_space(*str)) {
