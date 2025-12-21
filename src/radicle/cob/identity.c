@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <libssh/libssh.h>
+#include <string.h>
 
 #include <cob/identity.h>
 #include <util.h>
@@ -67,37 +68,75 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
     if (git_commit_lookup(&commit,repo,&oid_commit)) {
 	fprintf(stderr,"Failed to lookup commit from git repo\n");
 	return ret;
-    }
-    
-    //get tree oid
-    git_tree* tree = 0;
-    if (git_commit_tree(&tree,commit)) {
-	fprintf(stderr,"Failed to get tree associated with a git commit\n");
-	return ret;
-    }
-    Oid oid_tree = *git_tree_id(tree);
-    
-    //check sig with sig data being the tree oid bytes (id)
-    git_buf sig = {0};
-    git_buf signed_data = {0};
-    if (git_commit_extract_signature(&sig,&signed_data,repo,&oid_commit,0)) {
-	eprintf("failed to extract signature from commit");
-	return ret;
-    }
-    //iprintf("signature: %s",sig.ptr);
-    //iprintf("signed data: %s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
-            
+    }            
     git_commit* parent = 0;
-    do {
-	git_signature* gitsig = git_commit_committer(commit);
+    while (1) {
+	git_tree* tree = 0;
+	if (git_commit_tree(&tree,commit)) {
+	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
+	    return ret;
+	}
+	Oid oid_tree = *git_tree_id(tree);
+	//iprintf("oid_tree=%s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
+	git_buf sig = {0};
+	git_buf signed_data = {0};
+	oid_commit = *git_commit_id(commit);
+	if (git_commit_extract_signature(&sig,&signed_data,repo,&oid_commit,0)) {
+	    eprintf("failed to extract signature from commit");
+	    return ret;
+	}
+	const git_signature* gitsig = git_commit_committer(commit);
 	const char* email = gitsig->email;
 	Pubkey committer = {0};
 	committer.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
+	// verify that the sshsig is signed by the committer
 	if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer)) {
 	    eprintf("failed to validate ssh signature");
 	    return ret;
 	}
-
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
+	    fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the root rad/id ref\n");
+	    return ret;
+	}
+	const Oid* poid_entry = git_tree_entry_id(tree_entry);
+	if (!poid_entry) {
+	    fprintf(stderr,"Can't find oid of git tree entry\n");
+	    return ret;
+	}
+	git_blob* blob = 0;
+	if (git_blob_lookup(&blob,repo,poid_entry)) {
+	    fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
+	    return ret;
+	}
+	const uint8_t* blob_content = git_blob_rawcontent(blob);
+	json_object* identity_doc = json_tokener_parse((char*)blob_content);
+	json_object_object_foreach(identity_doc,key,val) {
+	    if (!strcmp(key,"delegates")) {
+		size_t n_delegates = json_object_array_length(val);
+		bool signer_match = false;
+		for (size_t i=0; i<n_delegates; i++) {
+		    json_object* delegate_obj = json_object_array_get_idx(val,i);
+		    Pubkey delegate = {0};
+		    delegate.bytes = did_to_pubkey(rad_strip('"',json_object_to_json_string(delegate_obj)));
+		    if (!memcmp(delegate.bytes,committer.bytes,32)) {
+			signer_match = true;
+			break;
+		    }
+		}
+		if (!signer_match) {
+		    eprintf("The committer is not an authorized delegate");
+		    return ret;
+		}
+	    }
+	    else if (!strcmp(key,"threshold")) {
+		int threshold = json_object_get_int(val);
+		if (threshold != 1) {
+		    eprintf("This program currently only supports a signing threshold of 1");
+		    return ret;
+		}
+	    }
+	}	
 	if (git_commit_parentcount(commit)) {   
 	    if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
 		fprintf(stderr,"Failed to get tree associated with a git commit\n");
@@ -106,22 +145,8 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	    commit = parent;
 	    parent = 0;
 	}
-    } while (git_commit_parentcount(commit));
-    tree = 0;
-    if (git_commit_tree(&tree,commit)) {
-	fprintf(stderr,"Failed to get tree associated with a git commit\n");
-	return ret;
+	else {
+	    return *poid_entry;
+	}
     }
-    git_tree_entry* tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
-	fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the root rad/id ref\n");
-	return ret;
-    }
-    const Oid* poid_entry = git_tree_entry_id(tree_entry);
-    if (!poid_entry) {
-	fprintf(stderr,"Can't find oid of git tree entry\n");
-	return ret;
-    }
-    ret = *poid_entry;
-    return ret;
 }

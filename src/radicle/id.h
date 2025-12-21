@@ -11,6 +11,8 @@ char* pubkey_to_did (const uint8_t* key);
 
 uint8_t* raw_did_to_pubkey (const char* did);
 
+uint8_t* did_to_pubkey (const char* did);
+
 char* oid_to_rid (const Oid oid);
 
 Oid rid_to_oid (const char* rid_str);

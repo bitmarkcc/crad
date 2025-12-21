@@ -125,6 +125,12 @@ int rad_sshsig_verify (const uint8_t* data, size_t n_data, const char* sshsig, P
     uint8_t* sshsig_bytes = decode_base64(rad_str_remove_spaces(sshsig_base64),177);
     uint8_t sig_raw [64];
     memcpy(sig_raw,sshsig_bytes+113,64);
+    uint8_t pubkey_raw [32];
+    memcpy(pubkey_raw,sshsig_bytes+33,32);
+    if (memcmp(pubkey_raw,signer.bytes,32)) {
+	eprintf("signer does not match");
+	goto err;
+    }
      
     EVP_PKEY* okey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519,0,signer.bytes,32);
 

@@ -105,7 +105,8 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 
     //get default branch and delegate for this repo
     char* default_branch = 0;
-    char* delegate = 0;
+    char** delegates = 0;
+    size_t n_delegates = 0;
     json_object_object_foreach(identity_doc,key,val) {
 	if (!strcmp(key,"payload")) {
 	    json_object_object_foreach(val,key2,val2) {
@@ -118,12 +119,16 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	    }
 	}
 	else if (!strcmp(key,"delegates")) {
-	    json_object* delegate_obj = json_object_array_get_idx(val,0);
-	    if (!delegate_obj) {
-		fprintf(stderr,"Can't find the delegates array object\n");
-		return 1;
+	    n_delegates = json_object_array_length(val);
+	    delegates = malloc(n_delegates*sizeof(char*));
+	    for (size_t i=0; i< n_delegates; i++) {
+		json_object* delegate_obj = json_object_array_get_idx(val,i);
+		if (!delegate_obj) {
+		    fprintf(stderr,"Can't find the delegates array object\n");
+		    return 1;
+		}
+		delegates[i] = rad_strip('"',json_object_to_json_string(delegate_obj));
 	    }
-	    delegate = rad_strip('"',json_object_to_json_string(delegate_obj));
 	}
     }
     //fprintf(stderr,"default_branch %s delegate %s\n",default_branch,delegate);
@@ -160,25 +165,32 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	//fprintf(stderr,"dst %s substring %s\n",dst,rad_substr(dst,-len_default_branch,len_default_branch));
 	if (!strcmp(rad_substr(dst,-len_default_branch,len_default_branch),default_branch)) {
 	    //fprintf(stderr,"dst branch matches default branch\n");
-	  if (!strcmp(delegate+8,did_raw)) {
-	      //fprintf(stderr,"delegate matches current signer\n");
-	      //make sure current signer controls the privkey
-	      Pubkey pubkey_from_privkey = profile_get_pubkey_from_privkey();
-	      if (!pubkey_from_privkey.bytes) {
-		  fprintf(stderr,"Failed to get pubkey from privkey\n");
-		  return 1;
-	      }
-	      const char* did_from_privkey = pubkey_to_did(pubkey_from_privkey.bytes)+8;
-	      if (!strcmp(did_raw,did_from_privkey)) {
-		  argv[5] = strdup(refspec_canon);
-		  if (exec_command("git",argv)) {
-		      fprintf(stderr,"git command failed\n");
-		      return 1;
-		  }
-	      }
-	  }
+	    bool signer_match = false;
+	    for (size_t i=0; i<n_delegates; i++) {
+		if (!strcmp(delegates[i]+8,did_raw)) {
+		    signer_match = true;
+		    break;
+		}
+	    }
+	    if (signer_match) {
+		//fprintf(stderr,"delegate matches current signer\n");
+		//make sure current signer controls the privkey
+		Pubkey pubkey_from_privkey = profile_get_pubkey_from_privkey();
+		if (!pubkey_from_privkey.bytes) {
+		    fprintf(stderr,"Failed to get pubkey from privkey\n");
+		    return 1;
+		}
+		const char* did_from_privkey = pubkey_to_did(pubkey_from_privkey.bytes)+8;
+		if (!strcmp(did_raw,did_from_privkey)) {
+		    argv[5] = strdup(refspec_canon);
+		    if (exec_command("git",argv)) {
+			fprintf(stderr,"git command failed\n");
+			return 1;
+		    }
+		}
+	    }
 	}
-
+	
 	// sign refs
 
 	Pubkey signer;

@@ -19,6 +19,10 @@ uint8_t* raw_did_to_pubkey (const char* did) {
     return decode_base58(did,34) + 2;
 }
 
+uint8_t* did_to_pubkey (const char* did) {
+    return decode_base58(did+8,34) + 2;
+}
+
 char* oid_to_rid (const Oid oid) {
     char* rid = encode_base58(oid.id,20);
     return rid;
