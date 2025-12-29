@@ -7,6 +7,7 @@
 #include <git.h>
 #include <util.h>
 #include <print.h>
+#include <set.h>
 
 const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
 
@@ -305,7 +306,10 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
     int ret = 0;
     Oid oid;
     while (!(ret = git_reference_next_name(&name,it))) {
-	git_reference_name_to_id(&oid,rrepo.repo,name);
+	if (git_reference_name_to_id(&oid,rrepo.repo,name)) {
+	    eprintf("failed to get oid from reference name");
+	    return oid_ret;
+	}
 	char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
 	char* short_name = rad_substr(name,17+strlen(did_raw),0); // remove the refs/namespaces/<did>/ part
 	// add oid and short_name to list of refs to sign
@@ -324,6 +328,7 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	fprintf(stderr,"Failed to get repository odb\n");
 	return oid_ret;
     }
+    iprintf("sign %s with len %u",refs_str,strlen(refs_str));
     if (git_odb_write(&oid,odb,(uint8_t*)refs_str,strlen(refs_str),GIT_OBJECT_BLOB)) {
 	fprintf(stderr,"Failed to write refs to odb\n");
 	return oid_ret;
@@ -335,9 +340,13 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
     }
     const char* oid_refs_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid_refs));
     uint8_t sig_bytes [64] = {0};
-    key_sign_bytes(sig_bytes,signer,refs_str,strlen(refs_str));
+    key_sign_bytes(sig_bytes,signer,(uint8_t*)refs_str,strlen(refs_str));
     if (git_odb_write(&oid,odb,sig_bytes,64,GIT_OBJECT_BLOB)) {
 	fprintf(stderr,"Failed to write sig to odb\n");
+	return oid_ret;
+    }
+    if (rad_sig_verify(refs_str,strlen(refs_str),sig_bytes,signer)) {
+	eprintf("failed to verify sig (test)\n");
 	return oid_ret;
     }
     Oid oid_sig = {{0}};
@@ -389,6 +398,7 @@ int rad_repo_set_upstream (git_repository* repo, const char* branch) {
 Oid rad_repo_validate (const char* path) {
     Oid rid = {{0}};
     char buf [HEXSIZ];
+
     //check local repo with git fsck
     char* argv [5];
     argv[0] = "git";
@@ -424,10 +434,10 @@ Oid rad_repo_validate (const char* path) {
 	break; // todo assume only one entry?
     }
     const char* rid_candidate_str = oid_to_rid(rid_candidate);
-    iprintf("rid_candidate is %s",rid_candidate_str);
 
     // setup rad repo struct and get the radicle storage path for the candidate rid
     RadRepo rrepo;
+    rrepo.repo = 0;
     rrepo.rid = rid_candidate;
     git_repository* repo_rad = 0;
     Storage storage = profile_get_storage();
@@ -448,17 +458,192 @@ Oid rad_repo_validate (const char* path) {
     }
     rrepo.repo = repo_rad;
 
+    // check if rid dervied from id doc matches the rid candidate
     Oid rid_from_id_doc = get_root_identity_doc_oid(rrepo.repo);
-    iprintf("rid_from_id_doc is %s",git_oid_tostr(buf,HEXSIZ,&rid_from_id_doc));
-    
     if (!git_oid_equal(&rid_from_id_doc,&rid_candidate)) {
 	eprintf("rid from id doc doesn't match the candidate rid");
 	return rid;
     }
-    
-    // check if signature for sigrefs is valid
-    
-    
+
+    // get list of all branches in git repo
+    const char* repo_path = git_repository_path(repo);
+    char* heads_path = "refs/heads";
+    SimpleSet files;
+    set_init(&files);
+    if (rad_dir_list_recursive(repo_path,heads_path,&files)) {
+	eprintf("failed to get list of refs");
+	return rid;
+    }
+    size_t n_files = 0;
+    char** files_list = set_to_array(&files,&n_files);    
+    // get corresponding list of oids for these branches
+    Oid* oids_list = malloc(n_files*sizeof(Oid));
+    for (size_t i=0; i<n_files; i++) {
+	if (git_reference_name_to_id(oids_list+i,repo,files_list[i])) {
+	    eprintf("failed to get the oid of a reference name: %s",files_list[i]);
+	    return rid;
+	}
+	iprintf("file %s oid %s",files_list[i],git_oid_tostr(buf,HEXSIZ,oids_list+i));
+    }
+
+    // make a list of the refs/oids that are in the rad repo. Also make list of all namespaces.
+    git_reference_iterator* refit = 0;
+    const char* glob = "refs/namespaces/*";
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
+	return rid;
+    }
+    const char* refname = 0;
+    int ret = 0;
+    Oid oid;
+    SimpleSet rrepo_files;
+    set_init(&rrepo_files);
+    SimpleSet namespaces;
+    set_init(&namespaces);
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	set_add_str(&rrepo_files,strdup(refname));
+	iprintf("added %s to rrepo_files set",refname);
+	if (set_contains_str(&rrepo_files,"refs/namespaces/z6Mkuq9mgy1DgxbCLEb5fAdMWf55nLmiyosL3uVfwHT52eK6/refs/heads/feature/sync")) {
+	    eprintf("rrepo_files set doesn't contain the sync feature");
+	    //return rid;
+	}
+	set_add_str(&namespaces,rad_namespace_from_ref(refname));
+    }    
+    if (ret != GIT_ITEROVER) {
+	eprintf("failed to iterate over glob reference names");
+	return rid;
+    }
+    size_t n_rrepo_files = 0;
+    char** rrepo_files_list = set_to_array(&rrepo_files,&n_rrepo_files);
+    for (size_t i=0; i<n_rrepo_files; i++) iprintf("rrepo_files_list[%u] = %s\n",i,rrepo_files_list[i]);
+    Oid* rrepo_oids_list = malloc(n_rrepo_files*sizeof(Oid));
+    iprintf("n_rrepo_files = %u",n_rrepo_files);
+    for (size_t i=0; i<n_rrepo_files; i++) {
+	iprintf("rrepo_files_list[%u] = %s\n",i,rrepo_files_list[i]);
+	if (git_reference_name_to_id(rrepo_oids_list+i,rrepo.repo,rrepo_files_list[i])) {
+	    eprintf("failed to get the oid of a reference name: %s",rrepo_files_list[i]);
+	    return rid;
+	}
+	iprintf("rrepo file %s oid %s",rrepo_files_list[i],git_oid_tostr(buf,HEXSIZ,rrepo_oids_list+i));
+    }
+    size_t n_namespaces = 0;
+    char** namespaces_list = set_to_array(&namespaces,&n_namespaces);
+    SimpleSet sigref_entries;
+    set_init(&sigref_entries);
+    char* sigrefname = malloc(128);
+    for (size_t i=0; i<n_namespaces; i++) {
+	iprintf("namespace %s",namespaces_list[i]);
+	sprintf(sigrefname,"refs/namespaces/%s/refs/rad/sigrefs",namespaces_list[i]);
+	//open sigrefs commit for the namespace
+	Oid sigrefs_oid = {{0}};
+	if (git_reference_name_to_id(&sigrefs_oid,rrepo.repo,sigrefname)) {
+	    eprintf("failed to get id of reference %s",sigrefname);
+	    return rid;
+	}
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&sigrefs_oid)) {
+	    eprintf("failed to lookup git commit");
+	    return rid;
+	}
+	git_tree* tree = 0;
+	if (git_commit_tree(&tree,commit)) {
+	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
+	    return rid;
+	}
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,"refs")) {
+	    eprintf("Can't find the git tree entry refs for the rad/sigrefs ref\n");
+	    return rid;
+	}
+	const Oid* poid_refs = git_tree_entry_id(tree_entry);
+	if (!poid_refs) {
+	    eprintf("Can't find oid of git tree entry\n");
+	    return rid;
+	}
+	git_blob* blob = 0;
+	if (git_blob_lookup(&blob,rrepo.repo,poid_refs)) {
+	    eprintf("Can't lookup blob corresponding to git oid");
+	    return rid;
+	}
+	const uint8_t* blob_content = git_blob_rawcontent(blob);
+	size_t refs_size = git_blob_rawsize(blob);
+	const uint8_t* refs_content = strdup(blob_content);
+	char* token = strtok((char*)blob_content,"\n");
+	while (token) {
+	    set_add_str(&sigref_entries,token);
+	    token = strtok(0,"\n");
+	}
+	//verify signature
+	tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,"signature")) {
+	    eprintf("Can't find the git tree entry `signature` for the rad/sigrefs ref\n");
+	    return rid;
+	}
+	poid_refs = git_tree_entry_id(tree_entry);
+	if (!poid_refs) {
+	    eprintf("Can't find oid of git tree entry\n");
+	    return rid;
+	}
+	blob = 0;
+	if (git_blob_lookup(&blob,rrepo.repo,poid_refs)) {
+	    eprintf("Can't lookup blob corresponding to git oid");
+	    return rid;
+	}
+	const uint8_t* sig = git_blob_rawcontent(blob);
+	Pubkey signer;
+	signer.bytes = raw_did_to_pubkey(namespaces_list[i]);
+	iprintf("verify %s with len %lu",refs_content,refs_size);
+	if (rad_sig_verify(refs_content,refs_size,sig,signer)) {
+	    eprintf("signature verification failed for sigrefs with namespace %s",namespaces_list[i]);
+	    return rid;
+	}
+    }
+
+    size_t n_sigref_entries = 0;
+    char** sigref_entries_list = set_to_array(&sigref_entries,&n_sigref_entries);
+
+    // Compare the files/oids list with the rrepo files/oids list to make sure rrepo contains each of the files/oids in the local repo list. Also check if the files/oids list matches with the sigref entries list.
+    bool allmatch = true;
+    for (size_t i=0; i<n_files; i++) {
+	iprintf("check %s",files_list[i]);
+	bool matches = false;
+	for (size_t j=0; j<n_rrepo_files; j++) {
+	    if (git_oid_equal(oids_list+i,rrepo_oids_list+j)) {
+		if (!strcmp(files_list[i],rad_refname_relative(rrepo_files_list[j]))) {
+		    matches = true;
+		    break;
+		}
+	    }
+	}
+	if (!matches) {
+	    allmatch = false;
+	    eprintf("a ref from local repo doesn't match with one in the rad repo");
+	    break;
+	}
+	matches = false;
+	for (size_t j=0; j<n_sigref_entries; j++) {
+	    Oid oid_entry;
+	    if (git_oid_fromstr(&oid_entry,rad_sigref_entry_oid(sigref_entries_list[j]))) {
+		eprintf("failed to parse git oid from string");
+		return rid;
+	    }
+	    if (git_oid_equal(oids_list+i,&oid_entry)) {
+		if (!strcmp(files_list[i],rad_sigref_entry_name(sigref_entries_list[j]))) {
+		    matches = true;
+		    break;
+		}
+	    }
+	}
+	if (!matches) {
+	    allmatch = false;
+	    eprintf("a ref from local repo doesn't match with a sigref entry in the rad repo");
+	    break;
+	}
+    }
+    if (!allmatch) {
+	return rid;
+    }
+  
     rid = rid_candidate;
     iprintf("repo valid with rid %s",oid_to_rid(rid));
     return rid;

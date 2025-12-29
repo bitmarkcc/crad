@@ -16,6 +16,9 @@ int key_sign_base58 (char** out, const Pubkey signer, const uint8_t* inp, size_t
 
 char* rad_sig_to_ssh_format (const uint8_t* sig_bytes, Pubkey signer);
 
+//sig assumed to be 64 bytes long
+int rad_sig_verify (const uint8_t* data, size_t n_data, const uint8_t* sig, Pubkey signer);
+
 int rad_sshsig_verify (const uint8_t* data, size_t n_data, const char* sshsig, Pubkey signer);
 
 #endif

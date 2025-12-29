@@ -7,8 +7,10 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #include <util.h>
+#include <print.h>
 
 char* rad_strcpy (char* out, const char* inp, int from, int len) {
     const char* inp_shifted = inp+from;
@@ -333,4 +335,31 @@ char* rad_str_remove_spaces (const char* str) {
     }
     *out_it = 0;
     return out;
+}
+
+int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSet* files) {
+    char* fullpath = malloc(strlen(basepath)+strlen(filepath)+2);
+    sprintf(fullpath,"%s/%s",basepath,filepath);
+    iprintf("in rad_dir_list_recursive with fullpath %s",fullpath);
+    DIR* dir = 0;
+    struct dirent *entry;
+    if (!(dir = opendir(fullpath))) return 1;
+    free(fullpath);
+    
+    while ((entry = readdir(dir)) != NULL) {
+	char path[1024];
+	if (entry->d_type == DT_DIR) {
+	    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+		continue;
+	    snprintf(path,sizeof(path),"%s/%s",filepath,entry->d_name);
+	    //printf("%*s[%s]\n", 0, "", entry->d_name);
+	    rad_dir_list_recursive(basepath,path,files);
+	} else {
+	    //printf("%*s- %s\n", 0, "", entry->d_name);
+	    snprintf(path,sizeof(path),"%s/%s",filepath,entry->d_name);
+	    set_add_str(files,path);
+	}
+    }
+    closedir(dir);
+    return 0;
 }

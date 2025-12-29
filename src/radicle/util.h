@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <json-c/json.h>
 
+#include <set.h>
+
 #define RAD_BUFSIZ 256
 #define RAD_BUFSIZ2 512
 
@@ -52,5 +54,7 @@ char* rad_str_with_line_size (const char* str, size_t n);
 char* rad_email_get_domain (const char* emailaddr);
 
 char* rad_str_remove_spaces (const char* str);
+
+int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSet* files);
 
 #endif
