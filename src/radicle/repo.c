@@ -483,7 +483,7 @@ Oid rad_repo_validate (const char* path) {
 	    eprintf("failed to get the oid of a reference name: %s",files_list[i]);
 	    return rid;
 	}
-	iprintf("file %s oid %s",files_list[i],git_oid_tostr(buf,HEXSIZ,oids_list+i));
+	//iprintf("file %s oid %s",files_list[i],git_oid_tostr(buf,HEXSIZ,oids_list+i));
     }
 
     // make a list of the refs/oids that are in the rad repo. Also make list of all namespaces.
@@ -502,11 +502,6 @@ Oid rad_repo_validate (const char* path) {
     set_init(&namespaces);
     while (!(ret = git_reference_next_name(&refname,refit))) {
 	set_add_str(&rrepo_files,strdup(refname));
-	iprintf("added %s to rrepo_files set",refname);
-	if (set_contains_str(&rrepo_files,"refs/namespaces/z6Mkuq9mgy1DgxbCLEb5fAdMWf55nLmiyosL3uVfwHT52eK6/refs/heads/feature/sync")) {
-	    eprintf("rrepo_files set doesn't contain the sync feature");
-	    //return rid;
-	}
 	set_add_str(&namespaces,rad_namespace_from_ref(refname));
     }    
     if (ret != GIT_ITEROVER) {
@@ -515,16 +510,12 @@ Oid rad_repo_validate (const char* path) {
     }
     size_t n_rrepo_files = 0;
     char** rrepo_files_list = set_to_array(&rrepo_files,&n_rrepo_files);
-    for (size_t i=0; i<n_rrepo_files; i++) iprintf("rrepo_files_list[%u] = %s\n",i,rrepo_files_list[i]);
     Oid* rrepo_oids_list = malloc(n_rrepo_files*sizeof(Oid));
-    iprintf("n_rrepo_files = %u",n_rrepo_files);
     for (size_t i=0; i<n_rrepo_files; i++) {
-	iprintf("rrepo_files_list[%u] = %s\n",i,rrepo_files_list[i]);
 	if (git_reference_name_to_id(rrepo_oids_list+i,rrepo.repo,rrepo_files_list[i])) {
 	    eprintf("failed to get the oid of a reference name: %s",rrepo_files_list[i]);
 	    return rid;
 	}
-	iprintf("rrepo file %s oid %s",rrepo_files_list[i],git_oid_tostr(buf,HEXSIZ,rrepo_oids_list+i));
     }
     size_t n_namespaces = 0;
     char** namespaces_list = set_to_array(&namespaces,&n_namespaces);
@@ -532,7 +523,6 @@ Oid rad_repo_validate (const char* path) {
     set_init(&sigref_entries);
     char* sigrefname = malloc(128);
     for (size_t i=0; i<n_namespaces; i++) {
-	iprintf("namespace %s",namespaces_list[i]);
 	sprintf(sigrefname,"refs/namespaces/%s/refs/rad/sigrefs",namespaces_list[i]);
 	//open sigrefs commit for the namespace
 	Oid sigrefs_oid = {{0}};
@@ -592,7 +582,6 @@ Oid rad_repo_validate (const char* path) {
 	const uint8_t* sig = git_blob_rawcontent(blob);
 	Pubkey signer;
 	signer.bytes = raw_did_to_pubkey(namespaces_list[i]);
-	iprintf("verify %s with len %lu",refs_content,refs_size);
 	if (rad_sig_verify(refs_content,refs_size,sig,signer)) {
 	    eprintf("signature verification failed for sigrefs with namespace %s",namespaces_list[i]);
 	    return rid;
@@ -605,7 +594,6 @@ Oid rad_repo_validate (const char* path) {
     // Compare the files/oids list with the rrepo files/oids list to make sure rrepo contains each of the files/oids in the local repo list. Also check if the files/oids list matches with the sigref entries list.
     bool allmatch = true;
     for (size_t i=0; i<n_files; i++) {
-	iprintf("check %s",files_list[i]);
 	bool matches = false;
 	for (size_t j=0; j<n_rrepo_files; j++) {
 	    if (git_oid_equal(oids_list+i,rrepo_oids_list+j)) {

@@ -340,7 +340,7 @@ char* rad_str_remove_spaces (const char* str) {
 int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSet* files) {
     char* fullpath = malloc(strlen(basepath)+strlen(filepath)+2);
     sprintf(fullpath,"%s/%s",basepath,filepath);
-    iprintf("in rad_dir_list_recursive with fullpath %s",fullpath);
+    //iprintf("in rad_dir_list_recursive with fullpath %s",fullpath);
     DIR* dir = 0;
     struct dirent *entry;
     if (!(dir = opendir(fullpath))) return 1;
