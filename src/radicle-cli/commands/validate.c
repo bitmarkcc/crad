@@ -19,8 +19,9 @@ int validate_run (Command c) {
     rad_git_init();
     Oid rid = rad_repo_validate(cwd);
     if (git_oid_is_zero(&rid)) {
-	eprintf("rid is zero");
+	eprintf("repo invalid");
 	return 1;
     }
+    iprintf("repo valid with rid %s",oid_to_rid(rid));
     return 0;
 }

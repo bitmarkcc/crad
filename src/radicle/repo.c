@@ -328,7 +328,7 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	fprintf(stderr,"Failed to get repository odb\n");
 	return oid_ret;
     }
-    iprintf("sign %s with len %u",refs_str,strlen(refs_str));
+    //iprintf("sign %s with len %u",refs_str,strlen(refs_str));
     if (git_odb_write(&oid,odb,(uint8_t*)refs_str,strlen(refs_str),GIT_OBJECT_BLOB)) {
 	fprintf(stderr,"Failed to write refs to odb\n");
 	return oid_ret;
@@ -633,6 +633,5 @@ Oid rad_repo_validate (const char* path) {
     }
   
     rid = rid_candidate;
-    iprintf("repo valid with rid %s",oid_to_rid(rid));
     return rid;
 }

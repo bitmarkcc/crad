@@ -68,16 +68,52 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
     if (git_commit_lookup(&commit,repo,&oid_commit)) {
 	fprintf(stderr,"Failed to lookup commit from git repo\n");
 	return ret;
-    }            
+    }
+    
     git_commit* parent = 0;
-    while (1) {
+    size_t n_commit_oids = 0;
+    size_t commit_oids_capacity = 8;
+    Oid* commit_oids = malloc(commit_oids_capacity*sizeof(Oid));
+    commit_oids[0] = oid_commit;
+    n_commit_oids++;
+    while (1) { // Follow the parents until you reach the root commit. Save each commit in a list.
+	if (git_commit_parentcount(commit)) {   
+	    if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
+		fprintf(stderr,"Failed to get tree associated with a git commit\n");
+		return ret;
+	    }
+	    commit = parent;
+	    parent = 0;
+	    if (n_commit_oids > commit_oids_capacity) {
+		commit_oids_capacity *= 2;
+		commit_oids = realloc(commit_oids,commit_oids_capacity*sizeof(Oid));
+	    }
+	    commit_oids[n_commit_oids] = *git_commit_id(commit);
+	    n_commit_oids++;
+	}
+	else {
+	    break;
+	}
+    }
+    
+    Oid root_doc_oid = {{0}};
+    for (size_t i=n_commit_oids-1; i>=1; i--) { // Now backtrack and check sigs
+	if (git_commit_lookup(&parent,repo,commit_oids+i)) {
+	    eprintf("failed to lookup commit from git repo");
+	    return ret;
+	}
+	if (git_commit_lookup(&commit,repo,commit_oids+i-1)) {
+	    eprintf("failed to lookup commit from git repo");
+	    return ret;
+	}
+
+	// verify that ssh sig is made by committer of commit 
 	git_tree* tree = 0;
 	if (git_commit_tree(&tree,commit)) {
 	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
 	    return ret;
 	}
 	Oid oid_tree = *git_tree_id(tree);
-	//iprintf("oid_tree=%s",git_oid_tostr(buf,HEXSIZ,&oid_tree));
 	git_buf sig = {0};
 	git_buf signed_data = {0};
 	oid_commit = *git_commit_id(commit);
@@ -89,10 +125,34 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	const char* email = gitsig->email;
 	Pubkey committer = {0};
 	committer.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
-	// verify that the sshsig is signed by the committer
 	if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer)) {
 	    eprintf("failed to validate ssh signature");
 	    return ret;
+	}
+
+	// get the delegates set by the parent and check that one of them is the signer of `commit`
+	tree = 0;
+	if (git_commit_tree(&tree,parent)) {
+	    eprintf("failed to get tree associated with a git commit");
+	    return ret;
+	}
+	if (i == n_commit_oids-1) { // check the parent sig just for the root commit, as others overlap with `commit`
+	    Oid oid_tree = *git_tree_id(tree);
+	    git_buf sig = {0};
+	    git_buf signed_data = {0};
+	    oid_commit = *git_commit_id(parent);
+	    if (git_commit_extract_signature(&sig,&signed_data,repo,commit_oids+i,0)) {
+		eprintf("failed to extract signature from commit");
+		return ret;
+	    }
+	    const git_signature* gitsig = git_commit_committer(parent);
+	    const char* email = gitsig->email;
+	    Pubkey committer_root = {0};
+	    committer_root.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
+	    if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer_root)) {
+		eprintf("failed to validate ssh signature of root commit");
+		return ret;
+	    }
 	}
 	git_tree_entry* tree_entry = 0;
 	if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
@@ -104,6 +164,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	    fprintf(stderr,"Can't find oid of git tree entry\n");
 	    return ret;
 	}
+	if (i==n_commit_oids-1) root_doc_oid = *poid_entry;;
 	git_blob* blob = 0;
 	if (git_blob_lookup(&blob,repo,poid_entry)) {
 	    fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
@@ -136,17 +197,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 		    return ret;
 		}
 	    }
-	}	
-	if (git_commit_parentcount(commit)) {   
-	    if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
-		fprintf(stderr,"Failed to get tree associated with a git commit\n");
-		return ret;
-	    }
-	    commit = parent;
-	    parent = 0;
-	}
-	else {
-	    return *poid_entry;
 	}
     }
+    return root_doc_oid;
 }

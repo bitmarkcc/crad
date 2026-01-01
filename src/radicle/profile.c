@@ -40,7 +40,7 @@ char* get_rad_node_home () {
 	if (env_home) {
 	    rad_home = malloc(strlen(env_home)+11);
 	    strcpy(rad_home,env_home);
-	    strcat(rad_home,"/.cradicle");
+	    strcat(rad_home,"/.radicle");
 	}
     }
     if (!rad_home) fprintf(stderr,"Can't find Radicle Home directory\n");
