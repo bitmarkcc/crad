@@ -44,6 +44,8 @@ Oid rad_repo_sign_refs (RadRepo rrepo, Pubkey signer);
 
 int rad_repo_set_upstream (git_repository* repo, const char* branch);
 
+Oid rid_of_rad_remote (git_repository* repo);
+
 Oid rad_repo_validate (const char* path);
 
 #endif

@@ -6,6 +6,7 @@
 #include <commands/init.h>
 #include <commands/clone.h>
 #include <commands/validate.h>
+#include <commands/issue.h>
 
 void print_error(const char *msg) {
     fprintf(stderr, "rad: %s\n", msg);
@@ -61,7 +62,7 @@ Command parse_args(int argc, char** argv) {
 }
 
 void print_help() {
-    printf("Usage: rad [OPTIONS] [COMMAND]\n");
+    printf("Usage: crad [OPTIONS] [COMMAND]\n");
     printf("Radicle command line interface\n");
     printf("Options:\n");
     printf("  --help, -h       Print help information\n");
@@ -111,6 +112,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"validate")) {
 		return validate_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"issue")) {
+		return issue_run(subcommand);
 	    }
 	    else {
 		eprintf("invalid command (%s)",exe);

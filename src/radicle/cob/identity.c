@@ -7,6 +7,16 @@
 #include <print.h>
 #include <key.h>
 
+IdentityTransaction transaction_identity_default () {
+    IdentityTransaction tx;
+    tx.n_actions = 0;
+    tx.actions = 0;
+    tx.n_embeds = 0;
+    tx.embeds = 0;
+    tx.type_name = "xyz.radicle.id";
+    return tx;
+}
+
 char* manifest_encode (Manifest manifest) {
     json_object* obj = json_object_new_object();
 
@@ -200,4 +210,33 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	}
     }
     return root_doc_oid;
+}
+
+Oid get_root_identity_commit_oid (git_repository* repo) {
+    Oid ret = {{0}};
+    Oid oid_commit = {{0}};
+    if (git_reference_name_to_id(&oid_commit,repo,"refs/rad/id")) {
+	fprintf(stderr,"Failed to get oid of reference name\n");
+	return ret;
+    }
+    git_commit* commit = 0;
+    if (git_commit_lookup(&commit,repo,&oid_commit)) {
+	fprintf(stderr,"Failed to lookup commit from git repo\n");
+	return ret;
+    }
+    git_commit* parent = 0;
+    while (1) { // Follow the parents until you reach the root commit.
+	if (git_commit_parentcount(commit)) {   
+	    if (git_commit_parent(&parent,commit,0)) { // todo handle multiple parents
+		eprintf("failed to get tree associated with a git commit");
+		return ret;
+	    }
+	    commit = parent;
+	    parent = 0;
+	}
+	else {
+	    break;
+	}
+    }
+    return *git_commit_id(commit);
 }

@@ -50,7 +50,7 @@ RadRepo rad_repo_create (const char* path, const Oid rid, const StorageInfo si) 
 
 RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message) {
 
-    Oid oid;
+    Oid oid = {{0}};
     RepoEntry re;
     re.oid = oid;
     git_odb* odb = 0;
@@ -114,6 +114,7 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
     
     for (size_t i=0; i<n_trailers; i++) {
 	strcat(commit_str,trailers[i]);
+	strcat(commit_str,"\n");
     }
 
     if (git_odb_write(&oid,odb,(uint8_t*)commit_str,strlen(commit_str),GIT_OBJECT_COMMIT)) {
@@ -207,8 +208,16 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
     strcat(header,sig_ssh);
     char** headers = &header;
     size_t n_headers = 1;
+    
     char** trailers = 0;
     size_t n_trailers = 0;
+    if (!git_oid_is_zero(&resource)) {
+	char buf[HEXSIZ];
+	trailers = malloc(sizeof(char*));
+	trailers[0] = malloc(128);
+	sprintf(trailers[0],"Rad-Resource: %s",git_oid_tostr(buf,HEXSIZ,&resource));
+	n_trailers++;
+    }
     
     return rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,spec.message);
 }
@@ -218,7 +227,6 @@ int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid ob
     git_reference* ref = 0;
     char refname [256]; //todo get right size here and below
     char reflogmsg [256];
-    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf [HEXSIZ];
     char* obj_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&obj_id));
     char* entry_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&entry_id));
@@ -290,7 +298,6 @@ int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl,
 
 Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
     Oid oid_ret = {{0}};
-    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
     char buf [HEXSIZ];
     char refs_str [1024]; //todo set the right size
     *refs_str = 0;
@@ -395,6 +402,26 @@ int rad_repo_set_upstream (git_repository* repo, const char* branch) {
     git_config_set_multivar(config,branch_merge,".*",branch_merge_value);
 }
 
+Oid rid_of_rad_remote (git_repository* repo) {
+    Oid rid = {{0}};
+    git_config* config = 0;
+    if (git_repository_config(&config,repo)) {
+	eprintf("failed to get the config file for the local git repository");
+	return rid;
+    }
+    git_config_iterator* it = 0;
+    if (git_config_multivar_iterator_new(&it,config,"remote.rad.url",0)) {
+	eprintf("failed to get git config iterator");
+	return rid;
+    }
+    git_config_entry* entry = 0;
+    Oid rid_candidate = {{0}};
+    while (!git_config_next(&entry,it)) {
+	return rid_to_oid(strdup(entry->value)+6);
+	// todo assume only one entry?
+    }
+}
+
 Oid rad_repo_validate (const char* path) {
     Oid rid = {{0}};
     char buf [HEXSIZ];
@@ -417,21 +444,10 @@ Oid rad_repo_validate (const char* path) {
 	eprintf("failed to open git repository at %s",path);
 	return rid;
     }
-    git_config* config = 0;
-    if (git_repository_config(&config,repo)) {
-	eprintf("failed to get the config file for the git repository at %s\n",path);
+    Oid rid_candidate = rid_of_rad_remote(repo);
+    if (git_oid_is_zero(&rid_candidate)) {
+	eprintf("failed to get candidate rid");
 	return rid;
-    }
-    git_config_iterator* it = 0;
-    if (git_config_multivar_iterator_new(&it,config,"remote.rad.url",0)) {
-	eprintf("failed to get git config iterator");
-	return rid;
-    }
-    git_config_entry* entry = 0;
-    Oid rid_candidate = {{0}};
-    while (!git_config_next(&entry,it)) {
-	rid_candidate = rid_to_oid(strdup(entry->value)+6);
-	break; // todo assume only one entry?
     }
     const char* rid_candidate_str = oid_to_rid(rid_candidate);
 

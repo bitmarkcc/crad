@@ -2,10 +2,11 @@
 #define RADICLE_COB_IDENTITY_H
 
 #include <stdint.h>
-
-#include <id.h>
 #include <git2.h>
 #include <json-c/json.h>
+
+#include <id.h>
+#include <cob/common.h>
 
 extern const uint32_t COB_VERSION;
 extern const size_t HEXSIZ;
@@ -28,33 +29,17 @@ typedef struct {
 } IdentityAction;
 
 typedef struct {
-    char* name;
-    Oid content;
-} OidEmbed;
-
-typedef struct {
-    char* type_name;
-    uint32_t version;
-} Manifest;
-
-typedef enum {
-    COB_IDENTITY,
-    COB_ISSUE,
-    COB_PATCH
-} CobType;
-
-typedef struct {
-    char* type_name;
-    uint32_t version;
-    char* message;
+    size_t n_actions;
+    IdentityAction* actions;
     size_t n_embeds;
     OidEmbed* embeds;
-    size_t n_contents;
-    char** contents;
-} Create;
+    char* type_name;
+} IdentityTransaction;
 
+IdentityTransaction transaction_identity_default ();
 char* manifest_encode (Manifest manifest);
 json_object* get_identity_document (git_repository* repo);
 Oid get_root_identity_doc_oid (git_repository* repo);
+Oid get_root_identity_commit_oid (git_repository* repo);
 
 #endif
