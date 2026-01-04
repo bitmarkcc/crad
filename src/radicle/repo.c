@@ -16,6 +16,7 @@ RadRepo rad_repo_default () {
     Oid rid = {{0}};
     rrepo.rid = rid;
     rrepo.repo = 0;
+    return rrepo;
 }
 
 RadRepo rad_repo_create (const char* path, const Oid rid, const StorageInfo si) {
@@ -650,4 +651,37 @@ Oid rad_repo_validate (const char* path) {
   
     rid = rid_candidate;
     return rid;
+}
+
+int get_rad_repo_from_cwd (RadRepo* out) {
+    char cwd [1024];
+    if (!getcwd(cwd,sizeof(cwd))) {
+	eprintf("Can't get current working directory");
+	return 1;
+    }
+    rad_git_init();
+    git_repository* repo = 0;
+    if (git_repository_open(&repo,cwd)) {
+	eprintf("Can't open git repository. Make sure your current directory is a git repository.");
+	return 1;
+    }
+    Oid rid = rid_of_rad_remote(repo);
+    if (git_oid_is_zero(&rid)) {
+	eprintf("failed to get rid of rad remote");
+	return 1;
+    }
+    RadRepo rrepo;
+    rrepo.repo = 0;
+    rrepo.rid = rid;
+    git_repository* repo_rad = 0;
+    Storage storage = profile_get_storage();
+    char* path_rad = malloc(strlen(storage.path)+64);
+    sprintf(path_rad,"%s/%s",storage.path,oid_to_rid(rid));
+    if (git_repository_open(&repo_rad,path_rad)) {
+	eprintf("failed to open git repository at %s",path_rad);
+	return 1;
+    }
+    rrepo.repo = repo_rad;
+    *out = rrepo;
+    return 0;
 }

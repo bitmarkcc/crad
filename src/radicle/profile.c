@@ -6,10 +6,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <json-c/json.h>
+#include <sqlite3.h>
 
 #include <profile.h>
 #include <id.h>
 #include <util.h>
+#include <print.h>
 
 char* get_rad_home () {
     char* rad_home = 0;
@@ -45,6 +47,20 @@ char* get_rad_node_home () {
     }
     if (!rad_home) fprintf(stderr,"Can't find Radicle Home directory\n");
     return rad_home;
+}
+
+char* get_cob_dir () {
+    const char* rad_home = get_rad_home();
+    char* cob_dir = malloc(strlen(rad_home)+6);
+    sprintf(cob_dir,"%s/cobs",rad_home);
+    return cob_dir;
+}
+
+char* get_cob_cache_file () {
+    const char* rad_home = get_rad_home();
+    char* cob_cache_file = malloc(strlen(rad_home)+15);
+    sprintf(cob_cache_file,"%s/cobs/cache.db",rad_home);
+    return cob_cache_file;
 }
 
 bool profile_load() {
@@ -320,6 +336,29 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 
     char* did = pubkey_to_did(pubkey_raw);
 
+    // init cob cache
+    const char* cob_dir = get_cob_dir();
+    const char* db_file = get_cob_cache_file();
+    if (access(cob_dir,F_OK)) {
+	if (mkdir(get_cob_dir(),0700)) {
+	    eprintf("failed to create cob dir");
+	    return 1;
+	}
+	sqlite3* db = 0;
+	sqlite3_stmt* stmt = 0;
+	sqlite3_open(db_file,&db);
+	if (!db) {
+	    eprintf("failed to open cob db");
+	    return 1;
+	}
+	const char* sql = "CREATE TABLE Comments (ID BLOB PRIMARY KEY, Time INTEGER, Issue BLOB, ReplyTo BLOB)";
+	char* err_msg = 0;
+	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
+	    eprintf("failed to execute sql command: %s",err_msg);
+	    return 1;
+	}
+    }    
+    
     if (did) {
 	printf("Your Radicle DID is %s\n",did);
     }
@@ -343,17 +382,14 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 }
 
 char* profile_get_alias (const char* rad_home) {
-
     char* config_file = malloc(strlen(rad_home)+13);
     strcpy(config_file,rad_home);
     strcat(config_file,"/config.json");
-
     FILE* f = fopen(config_file,"r");
     if (!f) {
 	fprintf(stderr,"Cannot open config file for reading\n");
 	return 0;
     }
-
     char* buf = 0;
     size_t len = 0;
     ssize_t n_bytes_read = getdelim(&buf,&len,'\0',f);

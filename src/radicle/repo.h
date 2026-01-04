@@ -48,4 +48,6 @@ Oid rid_of_rad_remote (git_repository* repo);
 
 Oid rad_repo_validate (const char* path);
 
+int get_rad_repo_from_cwd (RadRepo* out);
+
 #endif

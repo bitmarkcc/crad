@@ -47,9 +47,18 @@ int transaction_issue_add_new (IssueTransaction* tx, char* title, char* desc) {
     return 0;
 }
 
+int transaction_issue_add_comment (IssueTransaction* tx, Oid reply_to, char* body) {
+    IssueAction action = action_issue_default();
+    action.type = ISSUE_ACTION_COMMENT;
+    action.body = body;
+    action.reply_to = reply_to;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
 RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args) {
     const char* type_name = args.type_name;
-    int32_t version = args.version;
+    //int32_t version = args.version;
     RepoEntry re = rad_repo_store(rrepo,resource,related,n_related,signer,args);
     rad_repo_update(rrepo,signer,type_name,re.oid,re.oid);
     return re;
@@ -145,6 +154,22 @@ RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     return cob_create(rrepo,signer,resource,parents,n_parents,create);
 }
 
+RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid reply_to) {
+    Oid parents [2] = {reply_to,get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 2;
+    char** contents = issue_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.issue";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[n_parents-1];
+    return rad_repo_store(rrepo,resource,parents,n_parents,signer,create);
+}
+
 RepoEntry transaction_identity_init (char* message, RadRepo rrepo, Pubkey signer, Document doc) {
     RepoEntry re;
     IdentityTransaction tx = transaction_identity_default();
@@ -161,10 +186,22 @@ RepoEntry transaction_issue_init (char* message, RadRepo rrepo, Pubkey signer, c
     return create_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
 }
 
+RepoEntry transaction_issue_comment (char* message, RadRepo rrepo, Pubkey signer, Oid reply_to, char* body) {
+    RepoEntry re;
+    IssueTransaction tx = transaction_issue_default();
+    Oid oid = {{0}};
+    transaction_issue_add_comment(&tx,reply_to,body);
+    return comment_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,reply_to);
+}
+
 RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
     return transaction_identity_init("Initialize identity",rrepo,signer,doc);
 }
 
 RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc) {
     return transaction_issue_init("Create issue",rrepo,signer,title,desc);
+}
+
+RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid reply_to, char* message) {
+    return transaction_issue_comment("Comment",rrepo,signer,reply_to,message);
 }
