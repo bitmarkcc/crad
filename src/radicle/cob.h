@@ -17,6 +17,8 @@ RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer);
 
 RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc);
 
-RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid reply_to, char* message);
+RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* message);
+
+RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees);
 
 #endif

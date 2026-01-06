@@ -56,6 +56,12 @@ int transaction_issue_add_comment (IssueTransaction* tx, Oid reply_to, char* bod
     return 0;
 }
 
+int transaction_issue_add_assign (IssueTransaction* tx, Oid issue_id, SimpleSet* assignees) {
+    IssueAction action = action_issue_default();
+    action.type = ISSUE_ACTION_ASSIGN;
+    action.assignees = assignees;
+}
+
 RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args) {
     const char* type_name = args.type_name;
     //int32_t version = args.version;
@@ -117,6 +123,15 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
 	    if (!git_oid_is_zero(&action.reply_to)) json_object_object_add(obj,"reply_to",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.reply_to)));
 	    json_object_object_add(obj,"type",json_object_new_string("comment"));
 	} //todo cover all cases for the action.type
+	else if (action.type == ISSUE_ACTION_ASSIGN) {
+	    json_object* assignees = json_object_new_array();
+	    size_t n_assignees = 0;
+	    char** assignees_list = set_to_array(action.assignees,&n_assignees);
+	    for (size_t i=0; i<n_assignees; i++) {
+		json_object_array_add(assignees,json_object_new_string(assignees_list[i]));
+	    }
+	    json_object_object_add(obj,"assignees",assignees);
+	}
 	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
     }
     return jsons;    
@@ -154,6 +169,7 @@ RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     return cob_create(rrepo,signer,resource,parents,n_parents,create);
 }
 
+//todo: should we use issue_id instead of reply_to?
 RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid reply_to) {
     Oid parents [2] = {reply_to,get_root_identity_commit_oid(rrepo.repo)};
     size_t n_parents = 2;
@@ -167,7 +183,23 @@ RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions,
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = parents[n_parents-1];
-    return rad_repo_store(rrepo,resource,parents,n_parents,signer,create);
+    return cob_create(rrepo,signer,resource,parents,n_parents,create);
+}
+
+RepoEntry assign_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid issue_id) {
+    Oid parents [2] = {issue_id,get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 2;
+    char** contents = issue_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.issue";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[n_parents-1];
+    return cob_create(rrepo,signer,resource,parents,n_parents,create);
 }
 
 RepoEntry transaction_identity_init (char* message, RadRepo rrepo, Pubkey signer, Document doc) {
@@ -186,12 +218,20 @@ RepoEntry transaction_issue_init (char* message, RadRepo rrepo, Pubkey signer, c
     return create_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
 }
 
-RepoEntry transaction_issue_comment (char* message, RadRepo rrepo, Pubkey signer, Oid reply_to, char* body) {
+RepoEntry transaction_issue_comment (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* body) {
     RepoEntry re;
     IssueTransaction tx = transaction_issue_default();
     Oid oid = {{0}};
     transaction_issue_add_comment(&tx,reply_to,body);
     return comment_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,reply_to);
+}
+
+RepoEntry transaction_issue_assign (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees) {
+    RepoEntry re;
+    IssueTransaction tx = transaction_issue_default();
+    Oid oid = {{0}};
+    transaction_issue_add_assign(&tx,issue_id,assignees);
+    return assign_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
 RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
@@ -202,6 +242,10 @@ RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc)
     return transaction_issue_init("Create issue",rrepo,signer,title,desc);
 }
 
-RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid reply_to, char* message) {
-    return transaction_issue_comment("Comment",rrepo,signer,reply_to,message);
+RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* message) {
+    return transaction_issue_comment("Comment",rrepo,signer,issue_id,reply_to,message);
+}
+
+RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees) {
+    return transaction_issue_assign("Assign",rrepo,signer,issue_id,assignees);
 }

@@ -2,15 +2,12 @@
 #include <string.h>
 
 #include <version.h>
+#include <print.h>
 #include <commands/auth.h>
 #include <commands/init.h>
 #include <commands/clone.h>
 #include <commands/validate.h>
 #include <commands/issue.h>
-
-void print_error(const char *msg) {
-    fprintf(stderr, "rad: %s\n", msg);
-}
 
 Command parse_args(int argc, char** argv) {
     
@@ -27,7 +24,7 @@ Command parse_args(int argc, char** argv) {
 	if (!strcmp(arg,"--json")) {
 	    cmd.json = true;
 	}
-	else if (!strcmp(arg,"--help") || !strcmp(arg,"-h")) {
+	else if ((!strcmp(arg,"--help") || !strcmp(arg,"-h")) && i==1) {
 	    cmd.type = CMD_HELP;
 	    command_set = true;
 	}
@@ -54,7 +51,7 @@ Command parse_args(int argc, char** argv) {
 	    command_set = true;
 	}
 	else {
-	    print_error("unexpected argument");
+	    eprintf("unexpected argument");
 	    exit(1);
 	}
     }

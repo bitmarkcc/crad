@@ -107,6 +107,24 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
     }
     
     Oid root_doc_oid = {{0}};
+    if (n_commit_oids == 1) {
+	git_tree* tree = 0;
+	if (git_commit_tree(&tree,commit)) {
+	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
+	    return ret;
+	}
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,"embeds/radicle.json")) {
+	    fprintf(stderr,"Can't find the git tree entry embeds/radicle.json for the root rad/id ref\n");
+	    return ret;
+	}
+	const Oid* poid_entry = git_tree_entry_id(tree_entry);
+	if (!poid_entry) {
+	    fprintf(stderr,"Can't find oid of git tree entry\n");
+	    return ret;
+	}
+	root_doc_oid = *poid_entry;
+    }
     for (size_t i=n_commit_oids-1; i>=1; i--) { // Now backtrack and check sigs
 	if (git_commit_lookup(&parent,repo,commit_oids+i)) {
 	    eprintf("failed to lookup commit from git repo");
@@ -174,7 +192,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	    fprintf(stderr,"Can't find oid of git tree entry\n");
 	    return ret;
 	}
-	if (i==n_commit_oids-1) root_doc_oid = *poid_entry;;
+	if (i==n_commit_oids-1) root_doc_oid = *poid_entry;
 	git_blob* blob = 0;
 	if (git_blob_lookup(&blob,repo,poid_entry)) {
 	    fprintf(stderr,"Can't lookup blob corresponding to git oid\n");

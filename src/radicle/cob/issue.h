@@ -5,6 +5,7 @@
 
 #include <id.h>
 #include <cob/common.h>
+#include <set.h>
 
 extern const uint32_t COB_VERSION;
 extern const size_t HEXSIZ;
@@ -25,6 +26,7 @@ typedef struct {
     char* title;
     char* body;
     Oid reply_to;
+    SimpleSet* assignees;
 } IssueAction;
 
 typedef struct {
