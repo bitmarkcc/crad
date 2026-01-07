@@ -12,9 +12,13 @@
 const uint32_t IDENTITY_VERSION = 1;
 
 Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer) {
-    Oid commit;
+    Oid commit = {{0}};
 
     RepoEntry re = cob_identity_init(doc,rrepo,signer);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to initialize cob identity");
+	return commit;
+    }
     // Create symbolic link ../refs/rad/id -> ../refs/cobs/xyz.radicle.id/<id>
     git_reference* ref = 0;
     char refname [256];

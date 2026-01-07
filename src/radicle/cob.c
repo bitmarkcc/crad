@@ -5,6 +5,7 @@
 #include <cob/identity.h>
 #include <cob/issue.h>
 #include <document.h>
+#include <print.h>
 
 const uint32_t COB_VERSION = 1;
 
@@ -62,11 +63,19 @@ int transaction_issue_add_assign (IssueTransaction* tx, Oid issue_id, SimpleSet*
     action.assignees = assignees;
 }
 
-RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args) {
+RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
+    Oid zero = {{0}};
     const char* type_name = args.type_name;
-    //int32_t version = args.version;
     RepoEntry re = rad_repo_store(rrepo,resource,related,n_related,signer,args);
-    rad_repo_update(rrepo,signer,type_name,re.oid,re.oid);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to store to rad repo");
+	return re;
+    }
+    if (git_oid_is_zero(&root_id)) root_id = re.oid;
+    if (rad_repo_update(rrepo,signer,type_name,root_id,re.oid)) {
+	eprintf("failed to update repo with new cob");
+	re.oid = zero;
+    }
     return re;
 }
 
@@ -138,8 +147,10 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
 }
 
 RepoEntry create_cob_identity (RadRepo rrepo, char* message, IdentityAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
-    Oid* parents = rad_get_parents(actions,n_actions);
-    size_t n_parents = n_actions; // todo correct?
+    //Oid* parents = rad_get_parents(actions,n_actions); // todo: correct?
+    //size_t n_parents = n_actions; // todo correct?
+    Oid* parents = 0;
+    size_t n_parents = 0;
     char** contents = identity_actions_to_json_strings(actions,n_actions);
     Create create;
     create.type_name = "xyz.radicle.id";
@@ -150,7 +161,8 @@ RepoEntry create_cob_identity (RadRepo rrepo, char* message, IdentityAction* act
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = {{0}};
-    return cob_create(rrepo,signer,resource,parents,n_parents,create);
+    Oid root_id = {{0}};
+    return cob_create(rrepo,signer,resource,parents,n_parents,create,root_id);
 }
 
 RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
@@ -166,12 +178,25 @@ RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = parents[0];
-    return cob_create(rrepo,signer,resource,parents,n_parents,create);
+    Oid root_id = {{0}};
+    return cob_create(rrepo,signer,resource,parents,n_parents,create,root_id);
 }
 
-//todo: should we use issue_id instead of reply_to?
-RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid reply_to) {
-    Oid parents [2] = {reply_to,get_root_identity_commit_oid(rrepo.repo)};
+RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid issue_id) {
+    char buf [HEXSIZ];
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    // get first parent
+    char refname [128];
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    Oid parent_oid = {{0}};
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.issue/%s",did_raw,git_oid_tostr(buf,HEXSIZ,&issue_id));
+    if (git_reference_name_to_id(&parent_oid,rrepo.repo,refname)) {
+	eprintf("failed to lookup oid from git reference name %s",refname);
+	return re;
+    }
+    Oid parents [2] = {parent_oid,get_root_identity_commit_oid(rrepo.repo)};
     size_t n_parents = 2;
     char** contents = issue_actions_to_json_strings(actions,n_actions);
     Create create;
@@ -183,11 +208,23 @@ RepoEntry comment_cob_issue (RadRepo rrepo, char* message, IssueAction* actions,
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = parents[n_parents-1];
-    return cob_create(rrepo,signer,resource,parents,n_parents,create);
+    return cob_create(rrepo,signer,resource,parents,n_parents,create,issue_id);
 }
 
 RepoEntry assign_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid issue_id) {
-    Oid parents [2] = {issue_id,get_root_identity_commit_oid(rrepo.repo)};
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    char buf [HEXSIZ];
+    char refname [128];
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    Oid parent_oid = {{0}};
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.issue/%s",did_raw,git_oid_tostr(buf,HEXSIZ,&issue_id));
+    if (git_reference_name_to_id(&parent_oid,rrepo.repo,refname)) {
+	eprintf("failed to lookup oid from git reference name %s",refname);
+	return re;
+    }
+    Oid parents [2] = {parent_oid,get_root_identity_commit_oid(rrepo.repo)};
     size_t n_parents = 2;
     char** contents = issue_actions_to_json_strings(actions,n_actions);
     Create create;
@@ -199,7 +236,7 @@ RepoEntry assign_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = parents[n_parents-1];
-    return cob_create(rrepo,signer,resource,parents,n_parents,create);
+    return cob_create(rrepo,signer,resource,parents,n_parents,create,issue_id);
 }
 
 RepoEntry transaction_identity_init (char* message, RadRepo rrepo, Pubkey signer, Document doc) {
@@ -223,7 +260,7 @@ RepoEntry transaction_issue_comment (char* message, RadRepo rrepo, Pubkey signer
     IssueTransaction tx = transaction_issue_default();
     Oid oid = {{0}};
     transaction_issue_add_comment(&tx,reply_to,body);
-    return comment_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,reply_to);
+    return comment_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
 RepoEntry transaction_issue_assign (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees) {
@@ -239,13 +276,59 @@ RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
 }
 
 RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc) {
-    return transaction_issue_init("Create issue",rrepo,signer,title,desc);
+    Oid zero = {{0}};
+    RepoEntry re = transaction_issue_init("Create issue",rrepo,signer,title,desc);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to open issue failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
 }
 
 RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* message) {
-    return transaction_issue_comment("Comment",rrepo,signer,issue_id,reply_to,message);
+    Oid zero = {{0}};
+    RepoEntry re = transaction_issue_comment("Comment",rrepo,signer,issue_id,reply_to,message);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to comment on issue failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
 }
 
 RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees) {
-    return transaction_issue_assign("Assign",rrepo,signer,issue_id,assignees);
+    Oid zero = {{0}};
+    RepoEntry re = transaction_issue_assign("Assign",rrepo,signer,issue_id,assignees);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to assign issue failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
 }

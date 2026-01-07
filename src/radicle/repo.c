@@ -237,6 +237,7 @@ int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid ob
     strcat(refname,type_name);
     strcat(refname,"/");
     strcat(refname,obj_id_str);
+    iprintf("create ref %s -> %s",obj_id_str,entry_id_str);
     sprintf(reflogmsg,"Updating collaborative object '%s/%s' with new entry %s\n",type_name,obj_id_str,entry_id_str);
     if (git_reference_create(&ref,rrepo.repo,refname,&entry_id,1,reflogmsg)) {
 	fprintf(stderr,"Failed to create git reference\n");
@@ -315,7 +316,7 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
     Oid oid;
     while (!(ret = git_reference_next_name(&name,it))) {
 	if (git_reference_name_to_id(&oid,rrepo.repo,name)) {
-	    eprintf("failed to get oid from reference name");
+	    eprintf("failed to get oid from reference name: %s",name);
 	    return oid_ret;
 	}
 	char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
@@ -683,5 +684,41 @@ int get_rad_repo_from_cwd (RadRepo* out) {
     }
     rrepo.repo = repo_rad;
     *out = rrepo;
+    return 0;
+}
+
+int create_sigrefs_commit (RadRepo rrepo, Pubkey signer, Oid tree_oid) {
+    // get parent
+    char refname [128];
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    Oid parent_oid = {{0}};
+    sprintf(refname,"refs/namespaces/%s/refs/rad/sigrefs",did_raw);
+    Oid* related = 0;
+    size_t n_related = 0;
+    int ret = git_reference_name_to_id(&parent_oid,rrepo.repo,refname);
+    if (ret && ret != GIT_ENOTFOUND) {
+	eprintf("failed to lookup oid from git reference name %s",refname);
+	return 1;
+    }
+    else if (!ret) {
+	related = malloc(sizeof(Oid));
+	related[0] = parent_oid;
+	n_related = 1;
+    }
+    char** headers = 0;
+    size_t n_headers = 0;
+    char** trailers = 0;
+    size_t n_trailers = 0;
+    char* message = "Update signed refs";
+    RepoEntry re = rad_repo_commit(rrepo,tree_oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to commit to rad repo");
+	return 1;
+    }
+    git_reference* ref = 0;
+    if (git_reference_create(&ref,rrepo.repo,refname,&re.oid,1,"set sigrefs (radicle)")) {
+	fprintf(stderr,"Failed to set git reference\n");
+	return 1;
+    }
     return 0;
 }

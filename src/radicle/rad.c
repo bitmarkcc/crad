@@ -3,8 +3,11 @@
 #include <repo.h>
 #include <stdio.h>
 #include <profile.h>
+#include <print.h>
 
-RadProjectResult rad_project_init (git_repository* repo, const char* name, const char* description, const char* default_branch, const Visibility visibility, Pubkey signer, const Storage storage) {    
+RadProjectResult rad_project_init (git_repository* repo, const char* name, const char* description, const char* default_branch, const Visibility visibility, Pubkey signer, const Storage storage) {
+    RadProjectResult res;
+    res.ret = 1;
     Project project = {strdup(name),strdup(description),strdup(default_branch)};
     json_object* project_obj = project_to_json_obj(project);
     char* keys [1];
@@ -15,11 +18,16 @@ RadProjectResult rad_project_init (git_repository* repo, const char* name, const
     Document doc = {IDENTITY_VERSION,payload,1,&signer,1,visibility};
 
     RadRepoResult rrepo_result = rad_repo_init(doc,storage,signer);
-
-    rad_init_configure(repo,rrepo_result.rrepo,default_branch,rrepo_result.oid,signer);
+    if (rrepo_result.ret) {
+	eprintf("failed to initialize rad repo");
+	return res;
+    }
     
-    RadProjectResult res;
-    Oid rid;
+    if (rad_init_configure(repo,rrepo_result.rrepo,default_branch,rrepo_result.oid,signer)) {
+	eprintf("failed to init and configure rad project");
+	return res;
+    }
+    
     res.rid = rrepo_result.rrepo.rid;
     res.doc = &doc;
     res.ret = 0;
@@ -52,6 +60,10 @@ RadRepoResult rad_repo_init (const Document doc, const Storage s, const Pubkey s
     rad_assert_equal(doc_encoding.oid.id,oid.id,20);
 
     Oid commit = document_init(doc,rrepo,signer);
+    if (git_oid_is_zero(&commit)) {
+	eprintf("failed to initialize document");
+	return rrepo_res;
+    }
     
     rrepo_res.ret = 0;
     rrepo_res.rrepo = rrepo;
@@ -141,25 +153,18 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     }
 
     oid = rad_repo_sign_refs(rrepo,signer); // list and sign refs
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign references");
+	return 1;
+    }
     
-    // Create sigrefs commit object and a reference to it
-    
-    Oid* related = 0;
-    size_t n_related = 0;
-    char** headers = 0;
-    size_t n_headers = 0;
-    char** trailers = 0;
-    size_t n_trailers = 0;
-    char* message = "Update signed refs";
-    RepoEntry re = rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
-    sprintf(refname,"refs/namespaces/%s/refs/rad/sigrefs",did_raw);
-    if (git_reference_create(&ref,rrepo.repo,refname,&re.oid,1,"set sigrefs (radicle)")) {
-	fprintf(stderr,"Failed to set git reference\n");
+    // Create sigrefs commit object and a reference to it    
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
 	return 1;
     }
 
     // Set upstream
-
     if (rad_repo_set_upstream(repo,default_branch)) {
 	fprintf(stderr,"Failed to set upstream\n");
 	return 1;

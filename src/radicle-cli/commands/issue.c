@@ -270,6 +270,10 @@ int issue_open (char* title, char* desc) {
     }
     Pubkey signer = profile_get_pubkey();    
     RepoEntry re = cob_issue_init(rrepo,signer,title,desc);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to open cob issue");
+	return 1;
+    }
     if (add_issue_to_cob_db(re.oid,pubkey_to_did(signer.bytes),"open")) {
 	eprintf("failed to add issue to cob db");
 	return 1;
@@ -310,6 +314,10 @@ int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t re
     }
     Pubkey signer = profile_get_pubkey();
     RepoEntry re = cob_issue_comment(rrepo,signer,issue_id,reply_to,message);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to comment on cob issue");
+	return 1;
+    }
     if (add_comment_to_cob_db(re.oid,issue_id,reply_to)) {
 	eprintf("failed to add comment to cob db");
 	return 1;
@@ -359,6 +367,10 @@ int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSe
 	return 1;
     }
     RepoEntry re = cob_issue_assign(rrepo,signer,issue_id,&assignees2);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to assign cob issue");
+	return 1;
+    }
     if (update_assignees_in_cob_db(issue_id,&assignees2)) {
 	eprintf("failed to update assignees in cob db");
 	return 1;

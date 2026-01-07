@@ -50,4 +50,6 @@ Oid rad_repo_validate (const char* path);
 
 int get_rad_repo_from_cwd (RadRepo* out);
 
+int create_sigrefs_commit (RadRepo rrepo, Pubkey signer, Oid tree_oid);
+
 #endif
