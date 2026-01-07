@@ -369,6 +369,12 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	    eprintf("failed to execute sql command: %s",err_msg);
 	    return 1;
 	}
+	sql = "CREATE TABLE Labels (Label TEXT, Issue BLOB);";
+	err_msg = 0;
+	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
+	    eprintf("failed to execute sql command: %s",err_msg);
+	    return 1;
+	}
     }    
     
     if (did) {

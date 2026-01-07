@@ -27,6 +27,7 @@ typedef struct {
     char* body;
     Oid reply_to;
     SimpleSet* assignees;
+    SimpleSet* labels;
 } IssueAction;
 
 typedef struct {

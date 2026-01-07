@@ -237,7 +237,7 @@ int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid ob
     strcat(refname,type_name);
     strcat(refname,"/");
     strcat(refname,obj_id_str);
-    iprintf("create ref %s -> %s",obj_id_str,entry_id_str);
+    //iprintf("create ref %s -> %s",obj_id_str,entry_id_str);
     sprintf(reflogmsg,"Updating collaborative object '%s/%s' with new entry %s\n",type_name,obj_id_str,entry_id_str);
     if (git_reference_create(&ref,rrepo.repo,refname,&entry_id,1,reflogmsg)) {
 	fprintf(stderr,"Failed to create git reference\n");

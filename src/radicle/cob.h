@@ -21,4 +21,6 @@ RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid rep
 
 RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees);
 
+RepoEntry cob_issue_label (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* labels);
+
 #endif

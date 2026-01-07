@@ -63,6 +63,12 @@ int transaction_issue_add_assign (IssueTransaction* tx, Oid issue_id, SimpleSet*
     action.assignees = assignees;
 }
 
+int transaction_issue_add_label (IssueTransaction* tx, Oid issue_id, SimpleSet* labels) {
+    IssueAction action = action_issue_default();
+    action.type = ISSUE_ACTION_LABEL;
+    action.labels = labels;
+}
+
 RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
     Oid zero = {{0}};
     const char* type_name = args.type_name;
@@ -271,6 +277,14 @@ RepoEntry transaction_issue_assign (char* message, RadRepo rrepo, Pubkey signer,
     return assign_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
+RepoEntry transaction_issue_label (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* labels) {
+    RepoEntry re;
+    IssueTransaction tx = transaction_issue_default();
+    Oid oid = {{0}};
+    transaction_issue_add_label(&tx,issue_id,labels);
+    return assign_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
+}
+
 RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
     return transaction_identity_init("Initialize identity",rrepo,signer,doc);
 }
@@ -319,6 +333,25 @@ RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSe
     RepoEntry re = transaction_issue_assign("Assign",rrepo,signer,issue_id,assignees);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("transaction to assign issue failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+RepoEntry cob_issue_label (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* labels) {
+    Oid zero = {{0}};
+    RepoEntry re = transaction_issue_label("Label",rrepo,signer,issue_id,labels);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to label issue failed");
 	return re;
     }
     Oid oid = rad_repo_sign_refs(rrepo,signer);
