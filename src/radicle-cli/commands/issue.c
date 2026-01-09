@@ -36,7 +36,9 @@ void print_help_issue () {
     printf("crad issue assign <issue-id> [--add <did>] [--delete <did>]\n");
     printf("crad issue label <issue-id> [--add <label>] [--delete <label>]\n");
     printf("crad issue react <issue-id> [--emoji <char>] [--to <comment>]\n");
-    printf("crad issue state <issue-id> [ --closed --open --solved ]\n");
+    printf("crad issue state <issue-id> [--closed --open --solved]\n");
+    printf("crad issue delete <issue-id>\n");
+    printf("crad issue edit <issue-id> [--title <title>] [--desc <text>]\n");
 }
 
 IssueCommand parse_args_issue (int argc, char** argv) {
@@ -181,6 +183,26 @@ int issue_run (Command c) {
 	size_t issue_id_hexlen = strlen(c.argv[1]);
 	return issue_state(issue_id,issue_id_hexlen,cmd.state);
     }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"delete")) {
+	Oid issue_id = {{0}};
+	if (git_oid_fromstrp(&issue_id,c.argv[1])) {
+	    eprintf("failed to parse issue id");
+	    return 1;
+	}
+	size_t issue_id_hexlen = strlen(c.argv[1]);
+	return issue_delete(issue_id,issue_id_hexlen);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"edit")) {
+	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
+	if (cmd.err) return 1;
+	Oid issue_id = {{0}};
+	if (git_oid_fromstrp(&issue_id,c.argv[1])) {
+	    eprintf("failed to parse issue id");
+	    return 1;
+	}
+	size_t issue_id_hexlen = strlen(c.argv[1]);
+	return issue_edit(issue_id,issue_id_hexlen,cmd.title,cmd.desc);
+    }
     else if (c.argc > 0) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
 	if (cmd.err) {
@@ -313,14 +335,64 @@ int add_issue_to_cob_db (Oid issue_id, const char* author, const char* status) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "INSERT INTO Issues (ID, Author, Status) VALUES (?, ?, ?);";
+    const char* sql = "INSERT INTO Issues (ID, EditID, Author, Status) VALUES (?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
     sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,2,author,-1,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,3,status,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,3,author,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,4,status,-1,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int edit_issue_in_cob_db (Oid issue_id, Oid edit_id) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "UPDATE Issues SET EditID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,edit_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int delete_issue_from_cob_db (Oid issue_id) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "DELETE FROM Issues WHERE id = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -427,7 +499,7 @@ int update_state_in_cob_db (Oid issue_id, IssueState state) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "Update Issues SET Status = ?, Reason = ? WHERE ID = ?;";
+    const char* sql = "UPDATE Issues SET Status = ?, Reason = ? WHERE ID = ?;";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
@@ -690,5 +762,70 @@ int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state) {
 	return 1;
     }
     iprintf("state %s set",git_oid_tostr(buf,HEXSIZ,&re.oid));
+    return 0;
+}
+
+int issue_delete (Oid issue_id, size_t issue_id_hexlen) {
+    char buf [HEXSIZ];
+    rad_git_init();
+    RadRepo rrepo = rad_repo_default();
+    if (get_rad_repo_from_cwd(&rrepo)) {
+	eprintf("failed to get rad repo from cwd");
+	return 1;
+    }
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	eprintf("failed to get repository odb");
+	return 1;
+    }
+    git_odb_object* odb_obj = 0;
+    if (git_odb_read_prefix(&odb_obj,odb,&issue_id,issue_id_hexlen)) {
+	eprintf("failed to read prefix from odb");
+	return 1;
+    }
+    issue_id = *git_odb_object_id(odb_obj);
+    Pubkey signer = profile_get_pubkey();
+    if (cob_issue_delete(rrepo,signer,issue_id)) {
+	eprintf("failed to delete cob issue");
+	return 1;
+    }
+    if (delete_issue_from_cob_db(issue_id)) {
+	eprintf("failed to delete issue from cob db");
+	return 1;
+    }
+    iprintf("issue %s deleted",git_oid_tostr(buf,HEXSIZ,&issue_id));
+    return 0;
+}
+
+int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc) {
+    char buf [HEXSIZ];
+    rad_git_init();
+    RadRepo rrepo = rad_repo_default();
+    if (get_rad_repo_from_cwd(&rrepo)) {
+	eprintf("failed to get rad repo from cwd");
+	return 1;
+    }
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	eprintf("failed to get repository odb");
+	return 1;
+    }
+    git_odb_object* odb_obj = 0;
+    if (git_odb_read_prefix(&odb_obj,odb,&issue_id,issue_id_hexlen)) {
+	eprintf("failed to read prefix from odb");
+	return 1;
+    }
+    issue_id = *git_odb_object_id(odb_obj);
+    Pubkey signer = profile_get_pubkey();
+    RepoEntry re = cob_issue_edit(rrepo,signer,issue_id,title,desc);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to edit cob issue");
+	return 1;
+    }
+    if (edit_issue_in_cob_db(issue_id,re.oid)) {
+	eprintf("failed to edit issue in cob db");
+	return 1;
+    }
+    iprintf("edit %s performed",git_oid_tostr(buf,HEXSIZ,&re.oid));
     return 0;
 }

@@ -18,6 +18,7 @@ IssueAction action_issue_default () {
     a.title = 0;
     a.body = 0;
     Oid zero = {{0}};
+    a.id = zero;
     a.reply_to = zero;
     a.assignees = 0;
     a.labels = 0;

@@ -30,6 +30,7 @@ typedef struct {
     IssueActionType type;
     char* title;
     char* body;
+    Oid id;
     Oid reply_to;
     SimpleSet* assignees;
     SimpleSet* labels;

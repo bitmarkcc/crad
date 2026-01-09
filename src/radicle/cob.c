@@ -84,6 +84,19 @@ int transaction_issue_add_state (IssueTransaction* tx, IssueState state) {
     action.state = state;
 }
 
+int transaction_issue_add_edit (IssueTransaction* tx, Oid issue_id, char* title, char* desc) {
+    IssueAction action = action_issue_default();
+    action.type = ISSUE_ACTION_EDIT;
+    action.title = title;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    action = action_issue_default();
+    action.type = ISSUE_ACTION_COMMENT_EDIT;
+    action.body = desc;
+    action.id = issue_id;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
 RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
     Oid zero = {{0}};
     const char* type_name = args.type_name;
@@ -149,7 +162,7 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
 	}
 	else if (action.type == ISSUE_ACTION_COMMENT) { // todo implement embeds
 	    json_object_object_add(obj,"body",json_object_new_string(action.body));
-	    //if (!git_oid_is_zero(action.embeds)) json_object_object_add(obj,"reply_to",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.embeds)));
+	    //if (!git_oid_is_zero(action.embeds)) json_object_object_add();
 	    if (!git_oid_is_zero(&action.reply_to)) json_object_object_add(obj,"reply_to",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.reply_to)));
 	    json_object_object_add(obj,"type",json_object_new_string("comment"));
 	} //todo cover all cases for the action.type
@@ -179,12 +192,20 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
 	    json_object_object_add(obj,"reaction",json_object_new_string(action.emoji));
 	    json_object_object_add(obj,"type",json_object_new_string("comment.react"));
 	}
-	else if (action.type = ISSUE_ACTION_LIFECYCLE) {
+	else if (action.type == ISSUE_ACTION_LIFECYCLE) {
 	    json_object* obj_state = json_object_new_object();
 	    json_object_object_add(obj_state,"reason",json_object_new_string(action.state.reason));
 	    json_object_object_add(obj_state,"status",json_object_new_string(action.state.status));
 	    json_object_object_add(obj,"state",obj_state);
 	    json_object_object_add(obj,"type",json_object_new_string("lifecycle"));
+	}
+	else if (action.type == ISSUE_ACTION_COMMENT_EDIT) {
+	    json_object_object_add(obj,"body",json_object_new_string(action.body));
+	    json_object* embeds = json_object_new_array();
+	    // todo handle embeds
+	    json_object_object_add(obj,"embeds",embeds);
+	    json_object_object_add(obj,"id",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.id)));
+	    json_object_object_add(obj,"type",json_object_new_string("comment.edit"));
 	}
 	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
     }
@@ -312,6 +333,14 @@ RepoEntry transaction_issue_state (char* message, RadRepo rrepo, Pubkey signer, 
     return update_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
+RepoEntry transaction_issue_edit (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, char* title, char* desc) {
+    RepoEntry re;
+    IssueTransaction tx = transaction_issue_default();
+    Oid oid = {{0}};
+    transaction_issue_add_edit(&tx,issue_id,title,desc);
+    return update_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
+}
+
 RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
     return transaction_identity_init("Initialize identity",rrepo,signer,doc);
 }
@@ -417,6 +446,45 @@ RepoEntry cob_issue_state (RadRepo rrepo, Pubkey signer, Oid issue_id, IssueStat
     RepoEntry re = transaction_issue_state("Lifecycle",rrepo,signer,issue_id,state);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("transaction to label issue failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+int cob_issue_delete (RadRepo rrepo, Pubkey signer, Oid issue_id) {
+    char refname [256];
+    char buf [HEXSIZ];
+    char* issue_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&issue_id));
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.issue/%s",pubkey_to_did(signer.bytes)+8,issue_id_str);
+    if (git_reference_remove(rrepo.repo,refname)) {
+	eprintf("failed to remove git reference %s",refname);
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
+	return 1;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	return 1;
+    }
+    return 0;
+}
+
+RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* title, char* desc) {
+    Oid zero = {{0}};
+    RepoEntry re = transaction_issue_edit("Edit",rrepo,signer,issue_id,title,desc);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to edit issue failed");
 	return re;
     }
     Oid oid = rad_repo_sign_refs(rrepo,signer);

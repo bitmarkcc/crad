@@ -28,4 +28,8 @@ RepoEntry cob_issue_react (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply
 
 RepoEntry cob_issue_state (RadRepo rrepo, Pubkey signer, Oid issue_id, IssueState state);
 
+int cob_issue_delete (RadRepo rrepo, Pubkey signer, Oid issue_id);
+
+RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* title, char* desc);
+
 #endif

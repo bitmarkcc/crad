@@ -28,5 +28,7 @@ int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSe
 int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete);
 int issue_react (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char emoji [4]);
 int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state);
+int issue_delete (Oid issue_id, size_t issue_id_hexlen);
+int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc);
 
 #endif
