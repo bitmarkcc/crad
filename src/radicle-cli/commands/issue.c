@@ -23,6 +23,9 @@ IssueCommand command_issue_default() {
     cmd.issue_id_hexlen = 0;
     set_init(&cmd.add);
     set_init(&cmd.delete);
+    memset(cmd.emoji,0,4);
+    IssueState state = {0};
+    cmd.state = state;
     return cmd;
 }
 
@@ -32,6 +35,8 @@ void print_help_issue () {
     printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>]\n");
     printf("crad issue assign <issue-id> [--add <did>] [--delete <did>]\n");
     printf("crad issue label <issue-id> [--add <label>] [--delete <label>]\n");
+    printf("crad issue react <issue-id> [--emoji <char>] [--to <comment>]\n");
+    printf("crad issue state <issue-id> [ --closed --open --solved ]\n");
 }
 
 IssueCommand parse_args_issue (int argc, char** argv) {
@@ -46,7 +51,7 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 	else if (!strcmp(argv[i],"--message")) {
 	    if (i+1 < argc) cmd.message = strdup(argv[i+1]);
 	}
-	else if (!strcmp(argv[i],"--reply-to")) {
+	else if (!strcmp(argv[i],"--reply-to") || !strcmp(argv[i],"--to")) {
 	    if (i+1 >= argc) {
 		eprintf("no parameter to --reply-to");
 		cmd.err = 1;
@@ -76,6 +81,24 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 		return cmd;
 	    }
 	    set_add_str(&cmd.delete,argv[i+1]);
+	}
+	else if (!strcmp(argv[i],"--emoji")) {
+	    if (i+1 < argc) memcpy(cmd.emoji,argv[i+1],4);
+	}
+	else if (!strcmp(argv[i],"--closed")) {
+	    //todo
+	    cmd.state.reason = strdup("");
+	    cmd.state.status = strdup("closed");
+	}
+	else if (!strcmp(argv[i],"--open")) {
+	    //todo
+	    cmd.state.reason = strdup("");
+	    cmd.state.status = strdup("open");
+	}
+	else if (!strcmp(argv[i],"--solved")) {
+	    //todo
+	    cmd.state.reason = strdup("solved");
+	    cmd.state.status = strdup("closed");
 	}
     }
     return cmd;
@@ -136,6 +159,28 @@ int issue_run (Command c) {
 	size_t issue_id_hexlen = strlen(c.argv[1]);
 	return issue_label(issue_id,issue_id_hexlen,&cmd.add,&cmd.delete);
     }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"react")) {
+	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
+	if (cmd.err) return 1;
+	Oid issue_id = {{0}};
+	if (git_oid_fromstrp(&issue_id,c.argv[1])) {
+	    eprintf("failed to parse issue id");
+	    return 1;
+	}
+	size_t issue_id_hexlen = strlen(c.argv[1]);
+	return issue_react(issue_id,issue_id_hexlen,cmd.reply_to,cmd.reply_to_hexlen,cmd.emoji);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"state")) {
+	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
+	if (cmd.err) return 1;
+	Oid issue_id = {{0}};
+	if (git_oid_fromstrp(&issue_id,c.argv[1])) {
+	    eprintf("failed to parse issue id");
+	    return 1;
+	}
+	size_t issue_id_hexlen = strlen(c.argv[1]);
+	return issue_state(issue_id,issue_id_hexlen,cmd.state);
+    }
     else if (c.argc > 0) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
 	if (cmd.err) {
@@ -160,6 +205,33 @@ int add_comment_to_cob_db (Oid comment_id, Oid issue_id, Oid reply_to) {
 	return 1;
     }
     sqlite3_bind_blob(stmt,1,comment_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt,2,time(0));
+    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,4,reply_to.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int add_reaction_to_cob_db (Oid reaction_id, Oid issue_id, Oid reply_to) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "INSERT INTO Reactions (ID, Time, Issue, ReplyTo) VALUES (?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,reaction_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt,2,time(0));
     sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,4,reply_to.id,20,SQLITE_TRANSIENT);
@@ -346,6 +418,32 @@ int update_labels_in_cob_db (Oid issue_id, SimpleSet* labels) {
     return 0;
 }
 
+int update_state_in_cob_db (Oid issue_id, IssueState state) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "Update Issues SET Status = ?, Reason = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_text(stmt,1,state.status,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,2,state.reason,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
 int issue_open (char* title, char* desc) {
     char buf [HEXSIZ];
     rad_git_init();
@@ -516,4 +614,81 @@ int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet
     }
     iprintf("labeled issue %s",git_oid_tostr(buf,HEXSIZ,&issue_id));
     return 0;    
+}
+
+int issue_react (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char emoji [4]) {
+    char buf [HEXSIZ];
+    rad_git_init();
+    RadRepo rrepo = rad_repo_default();
+    if (get_rad_repo_from_cwd(&rrepo)) {
+	eprintf("failed to get rad repo from cwd");
+	return 1;
+    }
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	eprintf("failed to get repository odb");
+	return 1;
+    }
+    git_odb_object* odb_obj = 0;
+    if (git_odb_read_prefix(&odb_obj,odb,&issue_id,issue_id_hexlen)) {
+	eprintf("failed to read prefix from odb");
+	return 1;
+    }
+    issue_id = *git_odb_object_id(odb_obj);
+    if (reply_to_hexlen) {
+	odb_obj = 0;
+	if (git_odb_read_prefix(&odb_obj,odb,&reply_to,reply_to_hexlen)) {
+	    eprintf("failed to read prefix from odb");
+	    return 1;
+	}
+	reply_to = *git_odb_object_id(odb_obj);
+    }
+    else {
+	reply_to = issue_id;
+    }
+    Pubkey signer = profile_get_pubkey();
+    RepoEntry re = cob_issue_react(rrepo,signer,issue_id,reply_to,emoji);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to react on cob issue");
+	return 1;
+    }
+    if (add_reaction_to_cob_db(re.oid,issue_id,reply_to)) {
+	eprintf("failed to add react to cob db");
+	return 1;
+    }
+    iprintf("reaction %s created",git_oid_tostr(buf,HEXSIZ,&re.oid));
+    return 0;
+}
+
+int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state) {
+    char buf [HEXSIZ];
+    rad_git_init();
+    RadRepo rrepo = rad_repo_default();
+    if (get_rad_repo_from_cwd(&rrepo)) {
+	eprintf("failed to get rad repo from cwd");
+	return 1;
+    }
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo.repo)) {
+	eprintf("failed to get repository odb");
+	return 1;
+    }
+    git_odb_object* odb_obj = 0;
+    if (git_odb_read_prefix(&odb_obj,odb,&issue_id,issue_id_hexlen)) {
+	eprintf("failed to read prefix from odb");
+	return 1;
+    }
+    issue_id = *git_odb_object_id(odb_obj);
+    Pubkey signer = profile_get_pubkey();
+    RepoEntry re = cob_issue_state(rrepo,signer,issue_id,state);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to react on cob issue");
+	return 1;
+    }
+    if (update_state_in_cob_db(issue_id,state)) {
+	eprintf("failed to update state in cob db");
+	return 1;
+    }
+    iprintf("state %s set",git_oid_tostr(buf,HEXSIZ,&re.oid));
+    return 0;
 }

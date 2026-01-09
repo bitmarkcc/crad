@@ -3,6 +3,7 @@
 
 #include <document.h>
 #include <repo.h>
+#include <cob/issue.h>
 
 typedef struct {
     Oid id;
@@ -22,5 +23,9 @@ RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid rep
 RepoEntry cob_issue_assign (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees);
 
 RepoEntry cob_issue_label (RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* labels);
+
+RepoEntry cob_issue_react (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char emoji [4]);
+
+RepoEntry cob_issue_state (RadRepo rrepo, Pubkey signer, Oid issue_id, IssueState state);
 
 #endif

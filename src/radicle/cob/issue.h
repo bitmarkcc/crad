@@ -22,12 +22,19 @@ typedef enum {
 } IssueActionType;
 
 typedef struct {
+    char* reason;
+    char* status;
+} IssueState;
+
+typedef struct {
     IssueActionType type;
     char* title;
     char* body;
     Oid reply_to;
     SimpleSet* assignees;
     SimpleSet* labels;
+    char emoji [4];
+    IssueState state;
 } IssueAction;
 
 typedef struct {

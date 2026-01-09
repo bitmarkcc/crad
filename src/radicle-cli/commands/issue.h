@@ -4,6 +4,7 @@
 #include <command.h>
 #include <id.h>
 #include <set.h>
+#include <cob/issue.h>
 
 typedef struct {
     char err;
@@ -16,6 +17,8 @@ typedef struct {
     size_t reply_to_hexlen;
     SimpleSet add;
     SimpleSet delete;
+    char emoji [4];
+    IssueState state;
 } IssueCommand;
 
 int issue_run (Command c);
@@ -23,5 +26,7 @@ int issue_open (char* title, char* desc);
 int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char* message);
 int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete);
 int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete);
+int issue_react (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char emoji [4]);
+int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state);
 
 #endif

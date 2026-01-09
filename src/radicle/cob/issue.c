@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include <cob/issue.h>
 
 IssueTransaction transaction_issue_default () {
@@ -18,5 +20,9 @@ IssueAction action_issue_default () {
     Oid zero = {{0}};
     a.reply_to = zero;
     a.assignees = 0;
+    a.labels = 0;
+    memset(a.emoji,0,4);
+    IssueState null_state = {0};
+    a.state = null_state;
     return a;
 }
