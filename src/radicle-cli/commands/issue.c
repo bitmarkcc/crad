@@ -15,12 +15,13 @@ IssueCommand command_issue_default() {
     cmd.title = 0;
     cmd.desc = 0;
     cmd.message = 0;
-    Oid reply_to = {{0}};
-    cmd.reply_to = reply_to;
+    Oid zero = {{0}};
+    cmd.reply_to = zero;
     cmd.reply_to_hexlen = 0;
-    Oid issue_id = {{0}};
-    cmd.issue_id = issue_id;
+    cmd.issue_id = zero;
     cmd.issue_id_hexlen = 0;
+    cmd.edit = zero;
+    cmd.edit_hexlen = 0;
     set_init(&cmd.add);
     set_init(&cmd.delete);
     memset(cmd.emoji,0,4);
@@ -32,7 +33,7 @@ IssueCommand command_issue_default() {
 void print_help_issue () {
     printf("crad issue (Manage issues) Usage:\n");
     printf("crad issue open [--title <title>] [--desc <text>]\n");
-    printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>]\n");
+    printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>] [--edit <comment-id>]\n");
     printf("crad issue assign <issue-id> [--add <did>] [--delete <did>]\n");
     printf("crad issue label <issue-id> [--add <label>] [--delete <label>]\n");
     printf("crad issue react <issue-id> [--emoji <char>] [--to <comment>]\n");
@@ -67,6 +68,21 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 	    }
 	    cmd.reply_to = reply_to;
 	    cmd.reply_to_hexlen = strlen(argv[i+1]);
+	}
+	else if (!strcmp(argv[i],"--edit")) {
+	    if (i+1 >= argc) {
+		eprintf("no parameter to --edit");
+		cmd.err = 1;
+		return cmd;
+	    }
+	    Oid edit = {{0}};
+	    if (git_oid_fromstrp(&edit,argv[i+1])) {
+		eprintf("failed to parse edit oid");
+		cmd.err = 1;
+		return cmd;
+	    }
+	    cmd.edit = edit;
+	    cmd.edit_hexlen = strlen(argv[i+1]);
 	}
 	else if (!strcmp(argv[i],"--add")) {
 	    if (i+1 >= argc) {
@@ -137,7 +153,7 @@ int issue_run (Command c) {
 	    return 1;
 	}
 	size_t issue_id_hexlen = strlen(c.argv[1]);
-	return issue_comment(issue_id,issue_id_hexlen,cmd.reply_to,cmd.reply_to_hexlen,cmd.message);
+	return issue_comment(issue_id,issue_id_hexlen,cmd.reply_to,cmd.reply_to_hexlen,cmd.message,cmd.edit,cmd.edit_hexlen);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"assign")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -221,15 +237,16 @@ int add_comment_to_cob_db (Oid comment_id, Oid issue_id, Oid reply_to) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "INSERT INTO Comments (ID, Time, Issue, ReplyTo) VALUES (?, ?, ?, ?);";
+    const char* sql = "INSERT INTO Comments (ID, EditID, Time, Issue, ReplyTo) VALUES (?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
     sqlite3_bind_blob(stmt,1,comment_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt,2,time(0));
-    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_blob(stmt,4,reply_to.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,comment_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt,3,time(0));
+    sqlite3_bind_blob(stmt,4,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,5,reply_to.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -369,6 +386,31 @@ int edit_issue_in_cob_db (Oid issue_id, Oid edit_id) {
     }
     sqlite3_bind_blob(stmt,1,edit_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
+
+int edit_comment_in_cob_db (Oid comment_id, Oid edit_id) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "UPDATE Comments SET EditID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,edit_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,comment_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -538,8 +580,9 @@ int issue_open (char* title, char* desc) {
     return 0;
 }
 
-int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char* message) {
+int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char* message, Oid edit, size_t edit_hexlen) {
     char buf [HEXSIZ];
+    Oid zero = {{0}};
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
     if (get_rad_repo_from_cwd(&rrepo)) {
@@ -568,17 +611,37 @@ int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t re
     else {
 	reply_to = issue_id;
     }
+    if (edit_hexlen) {
+	odb_obj = 0;
+	if (git_odb_read_prefix(&odb_obj,odb,&edit,edit_hexlen)) {
+	    eprintf("failed to read prefix from odb");
+	    return 1;
+	}
+	edit = *git_odb_object_id(odb_obj);
+    }
+    else {
+	edit = zero;
+    }
     Pubkey signer = profile_get_pubkey();
-    RepoEntry re = cob_issue_comment(rrepo,signer,issue_id,reply_to,message);
+    RepoEntry re = cob_issue_comment(rrepo,signer,issue_id,reply_to,message,edit);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to comment on cob issue");
 	return 1;
     }
-    if (add_comment_to_cob_db(re.oid,issue_id,reply_to)) {
-	eprintf("failed to add comment to cob db");
-	return 1;
+    if (edit_hexlen) {
+	if (edit_comment_in_cob_db(edit,re.oid)) {
+	    eprintf("failed to edit comment in cob db");
+	    return 1;
+	}
+	iprintf("comment %s edited",git_oid_tostr(buf,HEXSIZ,&edit));
     }
-    iprintf("comment %s created",git_oid_tostr(buf,HEXSIZ,&re.oid));
+    else {
+	if (add_comment_to_cob_db(re.oid,issue_id,reply_to)) { // todo handle case of edit
+	    eprintf("failed to add comment to cob db");
+	    return 1;
+	}
+	iprintf("comment %s created",git_oid_tostr(buf,HEXSIZ,&re.oid));
+    }
     return 0;
 }
 

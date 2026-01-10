@@ -97,6 +97,15 @@ int transaction_issue_add_edit (IssueTransaction* tx, Oid issue_id, char* title,
     return 0;
 }
 
+int transaction_issue_add_comment_edit (IssueTransaction* tx, Oid comment_id, char* body) {
+    IssueAction action = action_issue_default();
+    action.type = ISSUE_ACTION_COMMENT_EDIT;
+    action.body = body;
+    action.id = comment_id;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
 RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
     Oid zero = {{0}};
     const char* type_name = args.type_name;
@@ -301,6 +310,14 @@ RepoEntry transaction_issue_comment (char* message, RadRepo rrepo, Pubkey signer
     return update_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
+RepoEntry transaction_issue_comment_edit (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, Oid edit, char* body) {
+    RepoEntry re;
+    IssueTransaction tx = transaction_issue_default();
+    Oid oid = {{0}};
+    transaction_issue_add_comment_edit(&tx,edit,body);
+    return update_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
+}
+
 RepoEntry transaction_issue_assign (char* message, RadRepo rrepo, Pubkey signer, Oid issue_id, SimpleSet* assignees) {
     RepoEntry re;
     IssueTransaction tx = transaction_issue_default();
@@ -365,9 +382,14 @@ RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc)
     return re;
 }
 
-RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* message) {
+RepoEntry cob_issue_comment (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply_to, char* message, Oid edit) {
     Oid zero = {{0}};
-    RepoEntry re = transaction_issue_comment("Comment",rrepo,signer,issue_id,reply_to,message);
+    RepoEntry re;
+    re.oid = zero;
+    if (git_oid_is_zero(&edit))
+	re = transaction_issue_comment("Comment",rrepo,signer,issue_id,reply_to,message);
+    else
+	re = transaction_issue_comment_edit("Edit comment",rrepo,signer,issue_id,edit,message);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("transaction to comment on issue failed");
 	return re;
