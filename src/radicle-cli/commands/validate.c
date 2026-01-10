@@ -6,8 +6,17 @@
 #include <repo.h>
 #include <git.h>
 
+void print_help_validate () {
+    printf("crad validate (Validate a radicle-initialized repository in the working directory) Usage:\n");
+    printf("crad validate\n");
+}
+
 int validate_run (Command c) {
-    if (!profile_load()) {
+    if (c.type == CMD_HELP) {
+	print_help_validate();
+	return 0;
+    }
+    else if (!profile_load()) {
 	fprintf(stderr,"No profile is loaded. Run `crad auth` to create one.\n");
 	return 1;
     }

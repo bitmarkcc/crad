@@ -123,17 +123,17 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 }
 
 int issue_run (Command c) {
-    if (!profile_load()) {
+    if (c.type == CMD_HELP) {
+	print_help_issue();
+	return 0;
+    }
+    else if (!profile_load()) {
 	eprintf("No profile is loaded. Run `crad auth` to create one");
 	return 1;
     }
     else if (!password_loaded()) {
 	eprintf("You must be authenticated first. Run `crad auth` to authenticate");
 	return 1;
-    }
-    else if (c.type == CMD_HELP) {
-	print_help_issue();
-	return 0;
     }
     else if (c.argc > 0 && !strcmp(c.argv[0],"open")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);

@@ -9,8 +9,17 @@
 #include <id.h>
 #include <repo.h>
 
+void print_help_clone () {
+    printf("crad clone (Clone Repository) Usage:\n");
+    printf("crad clone <rid> [<directory>]\n");
+}
+
 int clone_run (Command c) {
-    if (!c.argc) {
+    if (c.type == CMD_HELP) {
+	print_help_clone();
+	return 0;
+    }
+    else if (!c.argc) {
 	eprintf("crad clone requires at least one argument");
 	return 1;
     }

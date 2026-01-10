@@ -59,12 +59,18 @@ Command parse_args(int argc, char** argv) {
 }
 
 void print_help() {
-    printf("Usage: crad [OPTIONS] [COMMAND]\n");
+    printf("Usage: crad [OPTIONS] [COMMAND] [COMMAND OPTIONS]\n");
     printf("Radicle command line interface\n");
     printf("Options:\n");
     printf("  --help, -h       Print help information\n");
     printf("  --version        Print version information\n");
     printf("  --json           Output in JSON format (for version command)\n");
+    printf("Commands:\n");
+    printf("  auth\n");
+    printf("  clone\n");
+    printf("  init\n");
+    printf("  issue\n");
+    printf("  validate\n");
     // Add more help info as needed
 }
 

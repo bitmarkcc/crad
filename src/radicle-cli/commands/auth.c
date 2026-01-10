@@ -6,8 +6,17 @@
 #include <profile.h>
 #include <util.h>
 
+void print_help_auth () {
+    printf("crad auth (Authenticate) Usage:\n");
+    printf("crad auth\n");
+}
+
 int auth_run (Command c) {
-    if (profile_load()) {
+    if (c.type == CMD_HELP) {
+	print_help_auth();
+	return 0;
+    }
+    else if (profile_load()) {
 	if (password_loaded()) {
 	    printf("You are already authenticated\n");
 	    return 0;

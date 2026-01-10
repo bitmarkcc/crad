@@ -11,8 +11,17 @@
 #include <git.h>
 #include <rad.h>
 
+void print_help_init () {
+    printf("crad init (Initialize radicle repository given a git repository in the working directory) Usage:\n");
+    printf("crad init\n");
+}
+
 int init_run (Command c) {
-    if (!profile_load()) {
+    if (c.type == CMD_HELP) {
+	print_help_init();
+	return 0;
+    }
+    else if (!profile_load()) {
 	fprintf(stderr,"No profile is loaded. Run `crad auth` to create one\n");
 	return 1;
     }
