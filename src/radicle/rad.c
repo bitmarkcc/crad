@@ -172,3 +172,35 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     
     return 0;
 }
+
+bool signer_is_delegate (RadRepo rrepo, Pubkey signer) {
+    json_object* identity_doc = get_identity_document(rrepo.repo);
+    if (!identity_doc) {
+	eprintf("failed to get identity document");
+	return false;
+    }
+    SimpleSet delegates;
+    set_init(&delegates);
+    json_object_object_foreach(identity_doc,key,val) {
+	if (!strcmp(key,"delegates")) {
+	    size_t n_delegates_array = json_object_array_length(val);
+	    for (size_t i=0; i<n_delegates_array; i++) {
+		json_object* delegate_obj = json_object_array_get_idx(val,i);
+		if (!delegate_obj) {
+		    eprintf("failed to get the delegates array object");
+		    return 1;
+		}
+		set_add_str(&delegates,rad_strip('"',json_object_to_json_string(delegate_obj)));
+	    }
+	}
+    }
+    size_t n_delegates = 0;
+    char** delegates_list = set_to_array(&delegates,&n_delegates);
+    const char* signer_did = pubkey_to_did(signer.bytes);
+    for (size_t i=0; i<n_delegates; i++) {
+	if (!strcmp(signer_did,delegates_list[i])) {
+	    return true;
+	}
+    }
+    return false;
+}

@@ -121,7 +121,7 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	else if (!strcmp(key,"delegates")) {
 	    n_delegates = json_object_array_length(val);
 	    delegates = malloc(n_delegates*sizeof(char*));
-	    for (size_t i=0; i< n_delegates; i++) {
+	    for (size_t i=0; i<n_delegates; i++) {
 		json_object* delegate_obj = json_object_array_get_idx(val,i);
 		if (!delegate_obj) {
 		    fprintf(stderr,"Can't find the delegates array object\n");

@@ -8,6 +8,7 @@
 #include <print.h>
 #include <git.h>
 #include <cob.h>
+#include <rad.h>
 
 IssueCommand command_issue_default() {
     IssueCommand cmd;
@@ -666,6 +667,11 @@ int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSe
     issue_id = *git_odb_object_id(odb_obj);
     Pubkey signer = profile_get_pubkey();
 
+    if (!signer_is_delegate(rrepo,signer)) {
+	eprintf("the signer doesn't match one of the delegates for the repository");
+	return 1;
+    }
+    
     // Get former assignees from cob db
     SimpleSet former_assignees;
     set_init(&former_assignees);
@@ -719,6 +725,11 @@ int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet
     issue_id = *git_odb_object_id(odb_obj);
     Pubkey signer = profile_get_pubkey();
 
+    if (!signer_is_delegate(rrepo,signer)) {
+	eprintf("the signer doesn't match one of the delegates for the repository");
+	return 1;
+    }
+    
     // Get former labels from cob db
     SimpleSet former_labels;
     set_init(&former_labels);
@@ -815,6 +826,10 @@ int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state) {
     }
     issue_id = *git_odb_object_id(odb_obj);
     Pubkey signer = profile_get_pubkey();
+    if (!signer_is_delegate(rrepo,signer)) {
+	eprintf("the signer doesn't match one of the delegates for the repository");
+	return 1;
+    }
     RepoEntry re = cob_issue_state(rrepo,signer,issue_id,state);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to react on cob issue");
@@ -848,6 +863,10 @@ int issue_delete (Oid issue_id, size_t issue_id_hexlen) {
     }
     issue_id = *git_odb_object_id(odb_obj);
     Pubkey signer = profile_get_pubkey();
+    if (!signer_is_delegate(rrepo,signer)) {
+	eprintf("the signer doesn't match one of the delegates for the repository");
+	return 1;
+    }
     if (cob_issue_delete(rrepo,signer,issue_id)) {
 	eprintf("failed to delete cob issue");
 	return 1;
@@ -880,6 +899,10 @@ int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc) {
     }
     issue_id = *git_odb_object_id(odb_obj);
     Pubkey signer = profile_get_pubkey();
+    if (!signer_is_delegate(rrepo,signer)) {
+	eprintf("the signer doesn't match one of the delegates for the repository");
+	return 1;
+    }
     RepoEntry re = cob_issue_edit(rrepo,signer,issue_id,title,desc);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to edit cob issue");

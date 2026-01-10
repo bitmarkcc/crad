@@ -19,4 +19,6 @@ RadRepoResult rad_repo_init (Document doc, Storage s, Pubkey signer);
 
 int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default_branch, Oid identity, Pubkey signer);
 
+bool signer_is_delegate (RadRepo rrepo, Pubkey signer);
+
 #endif
