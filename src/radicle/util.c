@@ -12,6 +12,16 @@
 #include <util.h>
 #include <print.h>
 
+StrJsonMap str_json_map_new(size_t n) {
+    StrJsonMap map = {0};
+    if (n) {
+	map.n_keys = n;
+	map.keys = malloc(n*sizeof(char*)); // note: make sure no overflow
+	map.values = malloc(n*sizeof(json_object*));
+    }
+    return map;
+}
+
 char* rad_strcpy (char* out, const char* inp, int from, int len) {
     const char* inp_shifted = inp+from;
     int len_inp_shifted = strlen(inp_shifted);

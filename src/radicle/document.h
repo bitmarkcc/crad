@@ -4,7 +4,6 @@
 #include <key.h>
 #include <util.h>
 #include <id.h>
-#include <repo.h>
 
 extern const size_t HEXSIZ;
 
@@ -20,6 +19,8 @@ typedef struct {
     Pubkey* delegates;
     size_t threshold;
     Visibility visibility;
+    size_t n_allow;
+    Pubkey* allow;
 } Document;
 
 typedef struct {
@@ -31,7 +32,7 @@ typedef struct {
 
 extern const uint32_t IDENTITY_VERSION;
 
-Oid document_init (Document doc, RadRepo rrepo, Pubkey signer);
+Oid document_init (Document doc, git_repository* repo, Pubkey signer);
 
 DocumentEncoding document_encode (Document doc);
 

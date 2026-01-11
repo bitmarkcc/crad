@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <git2.h>
 
-#include <document.h>
 #include <id.h>
 #include <cob.h>
 #include <key.h>
@@ -11,10 +10,10 @@
 
 const uint32_t IDENTITY_VERSION = 1;
 
-Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer) {
+Oid document_init (const Document doc, git_repository* repo, const Pubkey signer) {
     Oid commit = {{0}};
 
-    RepoEntry re = cob_identity_init(doc,rrepo,signer);
+    RepoEntry re = cob_identity_init(doc,repo,signer);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to initialize cob identity");
 	return commit;
@@ -36,7 +35,7 @@ Oid document_init (const Document doc, const RadRepo rrepo, const Pubkey signer)
     strcat(reftarget,cob_id_str);
     strcpy(reflogmsg,"Create `rad/id` reference to point to new identity COB");
     
-    if (git_reference_symbolic_create(&ref,rrepo.repo,refname,reftarget,0,reflogmsg)) {
+    if (git_reference_symbolic_create(&ref,repo,refname,reftarget,0,reflogmsg)) {
 	fprintf(stderr,"Failed to create symbolic git reference\n");
 	return commit;
     }
@@ -68,6 +67,13 @@ DocumentEncoding document_encode (Document doc) {
     if (doc.visibility == VIS_PRIVATE) {
 	json_object* visibility_obj = json_object_new_object();
 	json_object_object_add(visibility_obj,"type",json_object_new_string("private"));
+	if (doc.n_allow) {
+	    json_object* allow_obj = json_object_new_array();
+	    for (size_t i=0; i<doc.n_allow; i++) {
+		json_object_array_add(allow_obj,json_object_new_string(pubkey_to_did(doc.allow[i].bytes)));
+	    }
+	    json_object_object_add(visibility_obj,"allow",allow_obj);
+	}
 	json_object_object_add(obj,"visibility",visibility_obj);
     }
 

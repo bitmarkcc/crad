@@ -30,15 +30,15 @@ RadRepo rad_repo_default ();
 
 RadRepo rad_repo_create (const char* path, const Oid rid, StorageInfo si);
 
-RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec);
+RepoEntry rad_repo_store (git_repository* repo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec);
 
-int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id);
+int rad_repo_update (git_repository* repo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id);
 
 int rad_repo_configure (git_repository* repo);
 
 int rad_repo_configure_remote (git_repository* repo, char* name, char* fetchurl, char* pushurl);
 
-RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message); 
+RepoEntry rad_repo_commit (git_repository* repo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message); 
 
 Oid rad_repo_sign_refs (RadRepo rrepo, Pubkey signer);
 

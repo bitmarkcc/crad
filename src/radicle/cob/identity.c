@@ -54,7 +54,7 @@ json_object* get_identity_document (git_repository* repo) {
     }
     oid = *poid;
     char buf [HEXSIZ];
-    iprintf("id document oid is %s oid to rid is %s",git_oid_tostr(buf,HEXSIZ,&oid),oid_to_rid(oid));
+    //iprintf("id document oid is %s oid to rid is %s",git_oid_tostr(buf,HEXSIZ,&oid),oid_to_rid(oid));
     git_blob* blob = 0;
     if (git_blob_lookup(&blob,repo,poid)) {
 	fprintf(stderr,"Can't lookup blob corresponding to git oid\n");
@@ -64,6 +64,67 @@ json_object* get_identity_document (git_repository* repo) {
     return json_tokener_parse((char*)blob_content);
 }
 
+int get_entities_from_identity_doc (SimpleSet* delegates, SimpleSet* allowed, StrJsonMap* payload, Visibility* visibility, git_repository* repo) {
+    json_object* identity_doc = get_identity_document(repo);
+    json_object_object_foreach(identity_doc,key,val) {
+	if (!strcmp(key,"delegates")) {
+	    size_t n_delegates = json_object_array_length(val);
+	    for (size_t i=0; i<n_delegates; i++) {
+		json_object* delegate_obj = json_object_array_get_idx(val,i);
+		if (!delegate_obj) {
+		    eprintf("can't find the delegates array object");
+		    return 1;
+		}
+		set_add_str(delegates,rad_strip('"',json_object_to_json_string(delegate_obj)));
+	    }
+	}
+	else if (!strcmp(key,"visibility")) {
+	    json_object_object_foreach(val,key2,val2) {
+		if (!strcmp(key2,"allow")) {
+		    size_t n_allowed = json_object_array_length(val2);
+		    for (size_t i=0; i<n_allowed; i++) {
+			json_object* allow_obj = json_object_array_get_idx(val2,i);
+			if (!allow_obj) {
+			    eprintf("can't find the allow array object");
+			    return 1;
+			}
+			set_add_str(allowed,rad_strip('"',json_object_to_json_string(allow_obj)));
+		    }
+		}
+		else if (!strcmp(key2,"type")) {
+		    const char* visibility_str = rad_strip('"',json_object_to_json_string(val2));
+		    if (!strcmp(visibility_str,"public")) {
+			*visibility = VIS_PUBLIC;
+		    }
+		    else if (!strcmp(visibility_str,"private")) {
+			*visibility = VIS_PRIVATE;
+		    }
+		    else {
+			eprintf("unsupported visibility type in identity document");
+			return 1;
+		    }
+		}
+	    }
+	}
+	else if (!strcmp(key,"payload")) {
+	    json_object_object_foreach(val,key2,val2) {
+		if (!strcmp(key2,"xyz.radicle.project")) {
+		    payload->keys = malloc(sizeof(char*));
+		    payload->values = malloc(sizeof(json_object*));
+		    payload->keys[0] = key2;
+		    payload->values[0] = val2;
+		    payload->n_keys = 1;
+		}
+		else {
+		    eprintf("unsupported payload id in the identity document");
+		    return 1;
+		}
+	    }
+	}
+    }
+    return 0;
+}
+    
 Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
     Oid ret = {{0}};
     char buf [HEXSIZ];
@@ -228,6 +289,16 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	}
     }
     return root_doc_oid;
+}
+
+Oid get_identity_commit_oid (git_repository* repo) {
+    Oid ret = {{0}};
+    Oid oid_commit = {{0}};
+    if (git_reference_name_to_id(&oid_commit,repo,"refs/rad/id")) {
+	fprintf(stderr,"Failed to get oid of reference name\n");
+	return ret;
+    }
+    return oid_commit;
 }
 
 Oid get_root_identity_commit_oid (git_repository* repo) {

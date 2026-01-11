@@ -7,6 +7,8 @@
 
 #include <id.h>
 #include <cob/common.h>
+#include <set.h>
+#include <document.h>
 
 extern const uint32_t COB_VERSION;
 extern const size_t HEXSIZ;
@@ -39,7 +41,9 @@ typedef struct {
 IdentityTransaction transaction_identity_default ();
 char* manifest_encode (Manifest manifest);
 json_object* get_identity_document (git_repository* repo);
+int get_entities_from_identity_doc (SimpleSet* delegates, SimpleSet* allowed, StrJsonMap* payload, Visibility* visibility, git_repository* repo);
 Oid get_root_identity_doc_oid (git_repository* repo);
+Oid get_identity_commit_oid (git_repository* repo);
 Oid get_root_identity_commit_oid (git_repository* repo);
 
 #endif

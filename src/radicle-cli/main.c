@@ -8,6 +8,7 @@
 #include <commands/clone.h>
 #include <commands/validate.h>
 #include <commands/issue.h>
+#include <commands/id.h>
 
 Command parse_args(int argc, char** argv) {
     
@@ -68,6 +69,7 @@ void print_help() {
     printf("Commands:\n");
     printf("  auth\n");
     printf("  clone\n");
+    printf("  id\n");
     printf("  init\n");
     printf("  issue\n");
     printf("  validate\n");
@@ -118,6 +120,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"issue")) {
 		return issue_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"id")) {
+		return id_run(subcommand);
 	    }
 	    else {
 		eprintf("invalid command (%s)",exe);

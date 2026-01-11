@@ -9,11 +9,11 @@
 
 const uint32_t COB_VERSION = 1;
 
-int transaction_identity_add_revision (IdentityTransaction* tx, char* title, char* desc, Document doc, Oid parent, RadRepo rrepo, Pubkey signer) {
+int transaction_identity_add_revision (IdentityTransaction* tx, char* title, char* desc, Document doc, Oid parent, git_repository* repo, Pubkey signer) {
     DocumentEncoding encoding = document_sign(doc,signer);
     Oid oid;
     git_odb* odb = 0;
-    if (git_repository_odb(&odb,rrepo.repo)) {
+    if (git_repository_odb(&odb,repo)) {
 	fprintf(stderr,"Failed to get repository odb\n");
 	return 1;
     }
@@ -106,16 +106,16 @@ int transaction_issue_add_comment_edit (IssueTransaction* tx, Oid comment_id, ch
     return 0;
 }
 
-RepoEntry cob_create (RadRepo rrepo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
+RepoEntry cob_create (git_repository* repo, Pubkey signer, Oid resource, Oid* related, size_t n_related, Create args, Oid root_id) {
     Oid zero = {{0}};
     const char* type_name = args.type_name;
-    RepoEntry re = rad_repo_store(rrepo,resource,related,n_related,signer,args);
+    RepoEntry re = rad_repo_store(repo,resource,related,n_related,signer,args);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to store to rad repo");
 	return re;
     }
     if (git_oid_is_zero(&root_id)) root_id = re.oid;
-    if (rad_repo_update(rrepo,signer,type_name,root_id,re.oid)) {
+    if (rad_repo_update(repo,signer,type_name,root_id,re.oid)) {
 	eprintf("failed to update repo with new cob");
 	re.oid = zero;
     }
@@ -221,7 +221,7 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
     return jsons;    
 }
 
-RepoEntry create_cob_identity (RadRepo rrepo, char* message, IdentityAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
+RepoEntry create_cob_identity (git_repository* repo, char* message, IdentityAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
     //Oid* parents = rad_get_parents(actions,n_actions); // todo: correct?
     //size_t n_parents = n_actions; // todo correct?
     Oid* parents = 0;
@@ -237,7 +237,36 @@ RepoEntry create_cob_identity (RadRepo rrepo, char* message, IdentityAction* act
     create.contents = contents;
     Oid resource = {{0}};
     Oid root_id = {{0}};
-    return cob_create(rrepo,signer,resource,parents,n_parents,create,root_id);
+    return cob_create(repo,signer,resource,parents,n_parents,create,root_id);
+}
+
+RepoEntry update_cob_identity (git_repository* repo, char* message, IdentityAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid root_oid) {
+    char buf [HEXSIZ];
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    // get parent
+    char refname [128];
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    Oid parent_oid = {{0}};
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.id/%s",did_raw,git_oid_tostr(buf,HEXSIZ,&root_oid));
+    if (git_reference_name_to_id(&parent_oid,repo,refname)) {
+	eprintf("failed to lookup oid from git reference name %s",refname);
+	return re;
+    }
+    Oid parents [1] = {parent_oid};
+    size_t n_parents = 1;
+    char** contents = identity_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.id";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = {{0}};
+    return cob_create(repo,signer,resource,parents,n_parents,create,root_oid);
 }
 
 RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
@@ -254,7 +283,7 @@ RepoEntry create_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     create.contents = contents;
     Oid resource = parents[0];
     Oid root_id = {{0}};
-    return cob_create(rrepo,signer,resource,parents,n_parents,create,root_id);
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,root_id);
 }
 
 RepoEntry update_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid issue_id) {
@@ -283,15 +312,55 @@ RepoEntry update_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     create.n_contents = n_actions;
     create.contents = contents;
     Oid resource = parents[n_parents-1];
-    return cob_create(rrepo,signer,resource,parents,n_parents,create,issue_id);
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,issue_id);
 }
 
-RepoEntry transaction_identity_init (char* message, RadRepo rrepo, Pubkey signer, Document doc) {
+RepoEntry transaction_identity_init (char* message, git_repository* repo, Pubkey signer, Document doc) {
     RepoEntry re;
     IdentityTransaction tx = transaction_identity_default();
     Oid oid = {{0}};
-    transaction_identity_add_revision(&tx,"Initial revision","",doc,oid,rrepo,signer);
-    return create_cob_identity(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
+    transaction_identity_add_revision(&tx,"Initial revision","",doc,oid,repo,signer);
+    return create_cob_identity(repo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
+}
+
+RepoEntry transaction_identity_update (char* message, git_repository* repo, Pubkey signer, char* title, char* desc, SimpleSet* delegates, size_t threshold, Visibility visibility, SimpleSet* allowed, StrJsonMap payload) {
+    Oid zero = {{0}};
+    RepoEntry re;
+    IdentityTransaction tx = transaction_identity_default();
+    Oid parent_oid = get_identity_commit_oid(repo);
+    Oid root_oid = get_root_identity_commit_oid(repo);
+    Document doc;
+    doc.version = IDENTITY_VERSION;
+    doc.payload = payload;
+    size_t n_delegates = 0;
+    char** delegates_list = set_to_array(delegates,&n_delegates);
+    doc.n_delegates = n_delegates;
+    doc.delegates = malloc(n_delegates*sizeof(Pubkey));
+    for (size_t i=0; i<n_delegates; i++) {
+	Pubkey pubkey;
+	pubkey.bytes = did_to_pubkey(delegates_list[i]);
+	doc.delegates[i] = pubkey;
+    }
+    if (threshold > 1) { // todo handle greater thresholds
+	eprintf("threshold greater than one currently not supported");
+	re.oid = zero;
+	return re;
+    }
+    else {
+	doc.threshold = 1;
+    }
+    doc.visibility = visibility;
+    size_t n_allowed = 0;
+    char** allowed_list = set_to_array(allowed,&n_allowed);
+    doc.n_allow = n_allowed;
+    doc.allow = malloc(n_allowed*sizeof(Pubkey));
+    for (size_t i=0; i<n_allowed; i++) {
+	Pubkey pubkey;
+	pubkey.bytes = did_to_pubkey(allowed_list[i]);
+	doc.allow[i] = pubkey;
+    }
+    transaction_identity_add_revision(&tx,title,desc,doc,parent_oid,repo,signer);
+    return update_cob_identity(repo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,root_oid);
 }
 
 RepoEntry transaction_issue_init (char* message, RadRepo rrepo, Pubkey signer, char* title, char* desc) {
@@ -358,8 +427,34 @@ RepoEntry transaction_issue_edit (char* message, RadRepo rrepo, Pubkey signer, O
     return update_cob_issue(rrepo,message,tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,issue_id);
 }
 
-RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer) {
-    return transaction_identity_init("Initialize identity",rrepo,signer,doc);
+RepoEntry cob_identity_init (Document doc, git_repository* repo, Pubkey signer) {
+    return transaction_identity_init("Initialize identity",repo,signer,doc);
+}
+
+RepoEntry cob_identity_update (RadRepo rrepo, Pubkey signer, char* title, char* desc, SimpleSet* delegates, size_t threshold, Visibility visibility, SimpleSet* allowed, StrJsonMap payload) {
+    Oid zero = {{0}};
+    RepoEntry re = transaction_identity_update("Propose revision",rrepo.repo,signer,title,desc,delegates,threshold,visibility,allowed,payload);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to update identity document failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    // set canonical rad/id reference
+    git_reference* ref = 0;
+    if (git_reference_create(&ref,rrepo.repo,"refs/rad/id",&re.oid,1,"set-local-branch (radicle)")) {
+	eprintf("failed to set git reference");
+	re.oid = zero;
+	return re;
+    }
+    return re;
 }
 
 RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc) {

@@ -14,7 +14,9 @@ typedef struct {
     IdentityTransaction tx;
 } IdentityTransactionResult;
 
-RepoEntry cob_identity_init (Document doc, RadRepo rrepo, Pubkey signer);
+RepoEntry cob_identity_init (Document doc, git_repository* repo, Pubkey signer);
+
+RepoEntry cob_identity_update (RadRepo rrepo, Pubkey signer, char* title, char* desc, SimpleSet* delegates, size_t threshold, Visibility visibility, SimpleSet* allowed, StrJsonMap payload);
 
 RepoEntry cob_issue_init (RadRepo rrepo, Pubkey signer, char* title, char* desc);
 

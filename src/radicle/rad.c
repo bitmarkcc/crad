@@ -1,7 +1,8 @@
-#include <rad.h>
 #include <string.h>
-#include <repo.h>
 #include <stdio.h>
+
+#include <rad.h>
+#include <repo.h>
 #include <profile.h>
 #include <print.h>
 
@@ -14,7 +15,7 @@ RadProjectResult rad_project_init (git_repository* repo, const char* name, const
     keys[0] = "xyz.radicle.project";
     json_object* values [1];
     values[0] = project_obj;
-    StrJsonMap payload = {1,keys,1,values};
+    StrJsonMap payload = {1,keys,values};
     Document doc = {IDENTITY_VERSION,payload,1,&signer,1,visibility};
 
     RadRepoResult rrepo_result = rad_repo_init(doc,storage,signer);
@@ -59,7 +60,7 @@ RadRepoResult rad_repo_init (const Document doc, const Storage s, const Pubkey s
     }
     rad_assert_equal(doc_encoding.oid.id,oid.id,20);
 
-    Oid commit = document_init(doc,rrepo,signer);
+    Oid commit = document_init(doc,rrepo.repo,signer);
     if (git_oid_is_zero(&commit)) {
 	eprintf("failed to initialize document");
 	return rrepo_res;

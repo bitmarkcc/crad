@@ -11,11 +11,12 @@
 #define RAD_BUFSIZ2 512
 
 typedef struct {
-    size_t nkeys;
+    size_t n_keys;
     char** keys;
-    size_t n_values;
     json_object** values;
 } StrJsonMap;
+
+StrJsonMap str_json_map_new(size_t n);
 
 char* rad_strcpy (char* out, const char* inp, int from, int len);
 

@@ -49,13 +49,13 @@ RadRepo rad_repo_create (const char* path, const Oid rid, const StorageInfo si) 
     return rrepo;
 }
 
-RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message) {
+RepoEntry rad_repo_commit (git_repository* repo, Oid tree_oid, Oid* related, size_t n_related, char** headers, size_t n_headers, char** trailers, size_t n_trailers, char* message) {
 
     Oid oid = {{0}};
     RepoEntry re;
     re.oid = oid;
     git_odb* odb = 0;
-    if (git_repository_odb(&odb,rrepo.repo)) {
+    if (git_repository_odb(&odb,repo)) {
 	fprintf(stderr,"Failed to get repository odb\n");
 	return re;
     }
@@ -63,7 +63,7 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
     char commit_str [4096]; //todo set right size
     char buf [HEXSIZ];
     git_signature* gitsig = 0;
-    if (git_signature_default(&gitsig,rrepo.repo)) {
+    if (git_signature_default(&gitsig,repo)) {
 	fprintf(stderr,"Failed to get git signature\n");
 	return re;
     }
@@ -127,7 +127,7 @@ RepoEntry rad_repo_commit (RadRepo rrepo, Oid tree_oid, Oid* related, size_t n_r
     return re;
 }
 
-RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec) {
+RepoEntry rad_repo_store (git_repository* repo, Oid resource, Oid* related, size_t n_related, Pubkey signer, Create spec) {
 
     RepoEntry re = {{0}};
     Manifest manifest;
@@ -136,7 +136,7 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
     char* manifest_encoded = manifest_encode(manifest);
     Oid oid;
     git_odb* odb = 0;
-    if (git_repository_odb(&odb,rrepo.repo)) {
+    if (git_repository_odb(&odb,repo)) {
 	fprintf(stderr,"Failed to get repository odb\n");
 	return re;
     }
@@ -145,7 +145,7 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
 	return re;
     }
     git_treebuilder* treebuilder = 0;
-    if (git_treebuilder_new(&treebuilder,rrepo.repo,0)) {
+    if (git_treebuilder_new(&treebuilder,repo,0)) {
 	fprintf(stderr,"Failed to initialize treebuilder\n");
 	return re;
     }
@@ -170,7 +170,7 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
 
     if (spec.n_embeds) {
 	git_treebuilder* treebuilder_embed = 0;
-	if (git_treebuilder_new(&treebuilder_embed,rrepo.repo,0)) {
+	if (git_treebuilder_new(&treebuilder_embed,repo,0)) {
 	    fprintf(stderr,"Failed to initialize embed treebuilder\n");
 	    return re;
 	}
@@ -220,11 +220,11 @@ RepoEntry rad_repo_store (RadRepo rrepo, Oid resource, Oid* related, size_t n_re
 	n_trailers++;
     }
     
-    return rad_repo_commit(rrepo,oid,related,n_related,headers,n_headers,trailers,n_trailers,spec.message);
+    return rad_repo_commit(repo,oid,related,n_related,headers,n_headers,trailers,n_trailers,spec.message);
 }
 
 
-int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id) {
+int rad_repo_update (git_repository* repo, Pubkey signer, const char* type_name, Oid obj_id, Oid entry_id) {
     git_reference* ref = 0;
     char refname [256]; //todo get right size here and below
     char reflogmsg [256];
@@ -239,7 +239,7 @@ int rad_repo_update (RadRepo rrepo, Pubkey signer, const char* type_name, Oid ob
     strcat(refname,obj_id_str);
     //iprintf("create ref %s -> %s",obj_id_str,entry_id_str);
     sprintf(reflogmsg,"Updating collaborative object '%s/%s' with new entry %s\n",type_name,obj_id_str,entry_id_str);
-    if (git_reference_create(&ref,rrepo.repo,refname,&entry_id,1,reflogmsg)) {
+    if (git_reference_create(&ref,repo,refname,&entry_id,1,reflogmsg)) {
 	fprintf(stderr,"Failed to create git reference\n");
 	return 1;
     }
@@ -322,10 +322,12 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
 	char* short_name = rad_substr(name,17+strlen(did_raw),0); // remove the refs/namespaces/<did>/ part
 	// add oid and short_name to list of refs to sign
-	strcat(refs_str,oid_str);
-	strcat(refs_str," ");
-	strcat(refs_str,short_name);
-	strcat(refs_str,"\n");
+	if (strcmp(short_name,"refs/rad/sigrefs")) { // don't include the last sigrefs reference
+	    strcat(refs_str,oid_str);
+	    strcat(refs_str," ");
+	    strcat(refs_str,short_name);
+	    strcat(refs_str,"\n");
+	}
     }
     if (ret != GIT_ITEROVER) {
 	fprintf(stderr,"Error iterating over glob reference names\n");
@@ -710,7 +712,7 @@ int create_sigrefs_commit (RadRepo rrepo, Pubkey signer, Oid tree_oid) {
     char** trailers = 0;
     size_t n_trailers = 0;
     char* message = "Update signed refs";
-    RepoEntry re = rad_repo_commit(rrepo,tree_oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
+    RepoEntry re = rad_repo_commit(rrepo.repo,tree_oid,related,n_related,headers,n_headers,trailers,n_trailers,message);
     if (git_oid_is_zero(&re.oid)) {
 	eprintf("failed to commit to rad repo");
 	return 1;

@@ -6,6 +6,7 @@
 #include <document.h>
 #include <id.h>
 #include <storage.h>
+#include <repo.h>
 
 typedef struct {
     Oid rid;
