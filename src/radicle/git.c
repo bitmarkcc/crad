@@ -72,5 +72,34 @@ char* rad_sigref_entry_name (const char* entry) {
     while (*entry != ' ') {
 	entry++;
     }
+    char* out = strdup(entry+1);
+    char* it = out;
+    while (*it != ' ') {
+	it++;
+    }
+    *it = 0;
+    return out;
+}
+
+char* rad_sigref_entry_namespace (const char* entry) {
+    while (*entry != ' ') {
+	entry++;
+    }
+    entry++;
+    while (*entry != ' ') {
+	entry++;
+    }
     return strdup(entry+1);
 }
+
+/*char* rad_namespace_from_ref (const char* refname) {
+    char* token = strtok(refname,"/");
+    if (token && !strcmp(token,"refs")) {
+	token = strtok(0,"/");
+	if (token && !strcmp(token,"namespaces")) {
+	    token = strtok(0,"/");
+	    if (token) return strdup(token);
+	}
+    }
+    return 0;
+    }*/

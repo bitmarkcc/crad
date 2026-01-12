@@ -344,7 +344,7 @@ int get_labels_from_cob_db (SimpleSet* labels, Oid issue_id) {
     return 0;
 }
 
-int add_issue_to_cob_db (Oid issue_id, const char* author, const char* status) {
+int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, const char* author, const char* status) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -353,15 +353,16 @@ int add_issue_to_cob_db (Oid issue_id, const char* author, const char* status) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "INSERT INTO Issues (ID, EditID, Author, Status) VALUES (?, ?, ?, ?);";
+    const char* sql = "INSERT INTO Issues (ID, RID, EditID, Author, Status) VALUES (?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
     sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,3,author,-1,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,4,status,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,repo_oid.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,4,author,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,5,status,-1,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -573,7 +574,7 @@ int issue_open (char* title, char* desc) {
 	eprintf("failed to open cob issue");
 	return 1;
     }
-    if (add_issue_to_cob_db(re.oid,pubkey_to_did(signer.bytes),"open")) {
+    if (add_issue_to_cob_db(re.oid,rrepo.rid,pubkey_to_did(signer.bytes),"open")) {
 	eprintf("failed to add issue to cob db");
 	return 1;
     }

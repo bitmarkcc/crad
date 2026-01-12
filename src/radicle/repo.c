@@ -478,7 +478,7 @@ Oid rad_repo_validate (const char* path) {
     }
     rrepo.repo = repo_rad;
 
-    // check if rid dervied from id doc matches the rid candidate
+    // check if rid derived from id doc matches the rid candidate
     Oid rid_from_id_doc = get_root_identity_doc_oid(rrepo.repo);
     if (!git_oid_equal(&rid_from_id_doc,&rid_candidate)) {
 	eprintf("rid from id doc doesn't match the candidate rid");
@@ -495,7 +495,8 @@ Oid rad_repo_validate (const char* path) {
 	return rid;
     }
     size_t n_files = 0;
-    char** files_list = set_to_array(&files,&n_files);    
+    char** files_list = set_to_array(&files,&n_files);
+    
     // get corresponding list of oids for these branches
     Oid* oids_list = malloc(n_files*sizeof(Oid));
     for (size_t i=0; i<n_files; i++) {
@@ -503,7 +504,6 @@ Oid rad_repo_validate (const char* path) {
 	    eprintf("failed to get the oid of a reference name: %s",files_list[i]);
 	    return rid;
 	}
-	//iprintf("file %s oid %s",files_list[i],git_oid_tostr(buf,HEXSIZ,oids_list+i));
     }
 
     // make a list of the refs/oids that are in the rad repo. Also make list of all namespaces.
@@ -539,6 +539,8 @@ Oid rad_repo_validate (const char* path) {
     }
     size_t n_namespaces = 0;
     char** namespaces_list = set_to_array(&namespaces,&n_namespaces);
+
+    // For each namespace validate the signature of sigrefs and store the sigrefs entries
     SimpleSet sigref_entries;
     set_init(&sigref_entries);
     char* sigrefname = malloc(128);
@@ -580,7 +582,9 @@ Oid rad_repo_validate (const char* path) {
 	const uint8_t* refs_content = strdup(blob_content);
 	char* token = strtok((char*)blob_content,"\n");
 	while (token) {
-	    set_add_str(&sigref_entries,token);
+	    char* full_token = malloc(strlen(token)+64);
+	    sprintf(full_token,"%s %s",token,namespaces_list[i]);
+	    set_add_str(&sigref_entries,full_token);
 	    token = strtok(0,"\n");
 	}
 	//verify signature
@@ -607,13 +611,13 @@ Oid rad_repo_validate (const char* path) {
 	    return rid;
 	}
     }
-
     size_t n_sigref_entries = 0;
     char** sigref_entries_list = set_to_array(&sigref_entries,&n_sigref_entries);
 
-    // Compare the files/oids list with the rrepo files/oids list to make sure rrepo contains each of the files/oids in the local repo list. Also check if the files/oids list matches with the sigref entries list.
+    // Compare the files/oids list with the rrepo files/oids list to make sure rrepo contains each of the files/oids in the local repo list.
     bool allmatch = true;
     for (size_t i=0; i<n_files; i++) {
+	//iprintf("check file %s",files_list[i]);
 	bool matches = false;
 	for (size_t j=0; j<n_rrepo_files; j++) {
 	    if (git_oid_equal(oids_list+i,rrepo_oids_list+j)) {
@@ -628,30 +632,96 @@ Oid rad_repo_validate (const char* path) {
 	    eprintf("a ref from local repo doesn't match with one in the rad repo");
 	    break;
 	}
-	matches = false;
+    }
+
+    // Check if the rrepo files/oids list matches with the sigref entries list
+    for (size_t i=0; i<n_rrepo_files; i++) {
+	//iprintf("check rrepo ref %s",rrepo_files_list[i]);
+	if (!strcmp(rad_refname_relative(rrepo_files_list[i]),"refs/rad/sigrefs")) continue;
+	bool matches = false;
 	for (size_t j=0; j<n_sigref_entries; j++) {
 	    Oid oid_entry;
 	    if (git_oid_fromstr(&oid_entry,rad_sigref_entry_oid(sigref_entries_list[j]))) {
 		eprintf("failed to parse git oid from string");
 		return rid;
 	    }
-	    if (git_oid_equal(oids_list+i,&oid_entry)) {
-		if (!strcmp(files_list[i],rad_sigref_entry_name(sigref_entries_list[j]))) {
-		    matches = true;
-		    break;
+	    if (git_oid_equal(rrepo_oids_list+i,&oid_entry)) {
+		if (!strcmp(rad_refname_relative(rrepo_files_list[i]),rad_sigref_entry_name(sigref_entries_list[j]))) {
+		    const char* rrepo_file_namespace = rad_namespace_from_ref(rrepo_files_list[i]);
+		    if (rrepo_file_namespace && !strcmp(rrepo_file_namespace,rad_sigref_entry_namespace(sigref_entries_list[j]))) {
+			matches = true;
+			break;
+		    }
 		}
 	    }
 	}
 	if (!matches) {
 	    allmatch = false;
-	    eprintf("a ref from local repo doesn't match with a sigref entry in the rad repo");
-	    break;
+	    eprintf("a ref from rad repo doesn't match with a sigref entry in the rad repo");
+	    return rid;
 	}
     }
-    if (!allmatch) {
+
+    // Check each canonical head has a corresponding namespaced head and the namespace is in the delegates for the repo
+    SimpleSet delegates;
+    set_init(&delegates);
+    SimpleSet allowed;
+    set_init(&allowed);
+    StrJsonMap payload = str_json_map_new(0);
+    Visibility visibility = 0;
+    if (get_entities_from_identity_doc(&delegates,&allowed,&payload,&visibility,rrepo.repo)) {
+	eprintf("failed to get entities from identity document");
 	return rid;
     }
-  
+    
+    SimpleSet canon_files;
+    set_init(&canon_files);
+    refit = 0;
+    glob = "refs/heads/*";
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
+	return rid;
+    }
+    refname = 0;
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	set_add_str(&canon_files,strdup(refname));
+    }
+    if (ret != GIT_ITEROVER) {
+	eprintf("failed to iterate over glob reference names");
+	return rid;
+    }
+    size_t n_canon_files = 0;
+    char** canon_files_list = set_to_array(&canon_files,&n_canon_files);
+    Oid* canon_oids_list = malloc(n_canon_files*sizeof(Oid));
+    for (size_t i=0; i<n_canon_files; i++) {
+	if (git_reference_name_to_id(canon_oids_list+i,rrepo.repo,canon_files_list[i])) {
+	    eprintf("failed to get the oid of a reference name: %s",canon_files_list[i]);
+	    return rid;
+	}
+    }
+
+    for (size_t i=0; i<n_canon_files; i++) {
+	//iprintf("check canon file %s",canon_files_list[i]);
+	bool matches = false;
+	for (size_t j=0; j<n_rrepo_files; j++) {
+	    if (git_oid_equal(canon_oids_list+i,rrepo_oids_list+j)) {
+		if (!strcmp(canon_files_list[i],rad_refname_relative(rrepo_files_list[j]))) {
+		    //check namespace is in delegates
+		    char rrepo_file_did [64];
+		    sprintf(rrepo_file_did,"did:key:%s",rad_namespace_from_ref(rrepo_files_list[j]));
+		    if (!set_contains_str(&delegates,rrepo_file_did)) {
+			matches = true;
+			break;
+		    }
+		}
+	    }
+	}
+	if (!matches) {
+	    eprintf("a ref from local repo doesn't match with one in the rad repo");
+	    return rid;
+	}
+    }
+    
     rid = rid_candidate;
     return rid;
 }
