@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <libgen.h>
 
 #include <cob.h>
 #include <cob/identity.h>
@@ -8,6 +9,19 @@
 #include <print.h>
 
 const uint32_t COB_VERSION = 1;
+
+char* cob_type_name (CobType type) {
+    switch (type) {
+    case COB_IDENTITY:
+	return strdup("xyz.radicle.id");
+    case COB_ISSUE:
+	return strdup("xyz.radicle.issue");
+    case COB_PATCH:
+	return strdup("xyz.radicle.patch");
+    default:
+	return strdup("xyz.radicle.unknown");
+    }
+}
 
 int transaction_identity_add_revision (IdentityTransaction* tx, char* title, char* desc, Document doc, Oid parent, git_repository* repo, Pubkey signer) {
     DocumentEncoding encoding = document_sign(doc,signer);
@@ -614,4 +628,58 @@ RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* titl
 	re.oid = zero;
     }
     return re;
+}
+
+int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo) {
+    char buf [HEXSIZ];
+    const char* type_name = cob_type_name(type);
+    const char* glob = "refs/namespaces/*";
+    git_reference_iterator* refit = 0;
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
+	return 1;
+    }
+    const char* name = 0;
+    int ret = 0;
+    SimpleSet root_cobs;
+    set_init(&root_cobs);
+    SimpleSet cob_refs;
+    set_init(&cob_refs);
+    while (!(ret = git_reference_next_name(&name,refit))) {
+	if (!strcmp(rad_basename_dirname(name),type_name)) {
+	    set_add_str(&root_cobs,basename(strdup(name)));
+	    set_add_str(&cob_refs,name);
+	}
+    }
+    size_t n_root_cobs = 0;
+    char** root_cobs_list = set_to_array(&root_cobs,&n_root_cobs);
+    size_t n_cob_refs = 0;
+    char** cob_refs_list = set_to_array(&cob_refs,&n_cob_refs);
+    for (size_t i=0; i<n_root_cobs; i++) {
+	Oid latest_entry = {{0}};
+	uint64_t latest_entry_time = 0;
+	for (size_t j=0; j<n_cob_refs; j++) {
+	    if (!strcmp(root_cobs_list[i],basename(strdup(cob_refs_list[j])))) {
+		Oid entry_oid = {{0}};
+		if (git_reference_name_to_id(&entry_oid,rrepo.repo,cob_refs_list[j])) {
+		    eprintf("failed to get from reference name: %s",cob_refs_list[j]);
+		    return 1;
+		}
+		git_commit* commit = 0;
+		if (git_commit_lookup(&commit,rrepo.repo,&entry_oid)) {
+		    eprintf("failed to lookup git commit");
+		    return 1;
+		}
+		git_time_t commit_time = git_commit_time(commit);
+		if (commit_time > latest_entry_time) {
+		    latest_entry_time = commit_time;
+		    latest_entry = entry_oid;
+		}
+	    }
+	}
+	set_add_str(cobs,git_oid_tostr(buf,HEXSIZ,&latest_entry));
+	
+    }
+
+    return 0;
 }

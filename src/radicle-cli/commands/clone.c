@@ -9,9 +9,25 @@
 #include <id.h>
 #include <repo.h>
 
+CloneCommand command_clone_default() {
+    CloneCommand cmd;
+    cmd.err = 0;
+    cmd.seed = 0;
+}
+
 void print_help_clone () {
     printf("crad clone (Clone Repository) Usage:\n");
     printf("crad clone <rid> [<directory>]\n");
+}
+
+CloneCommand parse_args_clone (int argc, char** argv) {
+    CloneCommand cmd = command_clone_default();
+    for (size_t i=0; i<argc; i++) {
+	if (!strcmp(argv[i],"--seed") || !strcmp(argv[i],"-s")) {
+	    if (i+1 < argc) cmd.seed = strdup(argv[i+1]);
+	}
+    }
+    return cmd;
 }
 
 int clone_run (Command c) {
@@ -23,22 +39,32 @@ int clone_run (Command c) {
 	eprintf("crad clone requires at least one argument");
 	return 1;
     }
-    if (!profile_load()) {
+    else if (!profile_load()) {
 	fprintf(stderr,"No profile is loaded. Run `crad auth` to create one.\n");
 	return 1;
     }
-    char* rid_str = strdup(c.argv[0]);
-    char* argv [5];
+    CloneCommand cmd = parse_args_clone(c.argc,c.argv);
+    if (cmd.err) {
+	return 1;
+    }
+    char* argv [7];
     argv[0] = "rad";
     argv[1] = "clone";
-    argv[2] = rid_str; // must be in format rad:zyx...cba
-    if (c.argc > 1) {
-	argv[3] = strdup(c.argv[1]);
+    int i = 0;
+    if (cmd.seed) {
+	argv[2] = "-s";
+	argv[3] = cmd.seed;
+	i += 2;
+    }
+    char* rid_str = strdup(c.argv[i]);
+    argv[i+2] = rid_str; // must be in format rad:zyx...cba
+    if (c.argc > i+1) {
+	argv[i+3] = strdup(c.argv[i+1]);
     }
     else {
-	argv[3] = strdup(rid_str+4);
+	argv[i+3] = strdup(rid_str+4);
     }
-    argv[4] = 0;
+    argv[i+4] = 0;
     if (exec_command("rad",argv)) {
 	eprintf("rad clone command failed");
 	return 1;

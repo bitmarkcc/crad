@@ -8,6 +8,7 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <libgen.h>
 
 #include <util.h>
 #include <print.h>
@@ -372,4 +373,9 @@ int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSe
     }
     closedir(dir);
     return 0;
+}
+
+char* rad_basename_dirname (const char* path) {
+    char* dir_name = dirname(strdup(path));
+    return basename(dir_name);
 }

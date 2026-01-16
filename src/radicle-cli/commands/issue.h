@@ -21,6 +21,7 @@ typedef struct {
     SimpleSet delete;
     char emoji [4];
     IssueState state;
+    SimpleSet assigned;
 } IssueCommand;
 
 int issue_run (Command c);
@@ -32,5 +33,7 @@ int issue_react (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t repl
 int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state);
 int issue_delete (Oid issue_id, size_t issue_id_hexlen);
 int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc);
+int issue_list (SimpleSet* assigned, IssueState state);
+int issue_show (Oid issue_id, size_t issue_id_hexlen);
 
 #endif

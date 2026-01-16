@@ -57,5 +57,6 @@ char* rad_email_get_domain (const char* emailaddr);
 char* rad_str_remove_spaces (const char* str);
 
 int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSet* files);
+char* rad_basename_dirname (const char* path);
 
 #endif

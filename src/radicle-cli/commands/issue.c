@@ -28,6 +28,7 @@ IssueCommand command_issue_default() {
     memset(cmd.emoji,0,4);
     IssueState state = {0};
     cmd.state = state;
+    set_init(&cmd.assigned);
     return cmd;
 }
 
@@ -41,6 +42,8 @@ void print_help_issue () {
     printf("crad issue state <issue-id> [--closed --open --solved]\n");
     printf("crad issue delete <issue-id>\n");
     printf("crad issue edit <issue-id> [--title <title>] [--desc <text>]\n");
+    printf("crad issue list [--assigned <did>] [--all | --closed | --open | --solved]\n");
+    printf("crad issue show <issue-id>\n");
 }
 
 IssueCommand parse_args_issue (int argc, char** argv) {
@@ -115,9 +118,16 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 	    cmd.state.status = strdup("open");
 	}
 	else if (!strcmp(argv[i],"--solved")) {
-	    //todo
 	    cmd.state.reason = strdup("solved");
 	    cmd.state.status = strdup("closed");
+	}
+	else if (!strcmp(argv[i],"--assigned")) {
+	    if (i+1 >= argc) {
+		eprintf("no parameter to --assigned");
+		cmd.err = 1;
+		return cmd;
+	    }
+	    set_add_str(&cmd.assigned,argv[i+1]);
 	}
     }
     return cmd;
@@ -220,6 +230,20 @@ int issue_run (Command c) {
 	size_t issue_id_hexlen = strlen(c.argv[1]);
 	return issue_edit(issue_id,issue_id_hexlen,cmd.title,cmd.desc);
     }
+    else if (c.argc > 0 && !strcmp(c.argv[0],"list")) {
+	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
+	if (cmd.err) return 1;
+	return issue_list(&cmd.assigned,cmd.state);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"show")) {
+	Oid issue_id = {{0}};
+	if (git_oid_fromstrp(&issue_id,c.argv[1])) {
+	    eprintf("failed to parse issue id");
+	    return 1;
+	}
+	size_t issue_id_hexlen = strlen(c.argv[1]);
+	return issue_show(issue_id,issue_id_hexlen);
+    }
     else if (c.argc > 0) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
 	if (cmd.err) {
@@ -229,7 +253,7 @@ int issue_run (Command c) {
     return 0;
 }
 
-int add_comment_to_cob_db (Oid comment_id, Oid issue_id, Oid reply_to) {
+int add_comment_to_cob_db (Oid comment_id, Oid issue_id, Oid reply_to, uint64_t commit_time) {    
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -245,9 +269,21 @@ int add_comment_to_cob_db (Oid comment_id, Oid issue_id, Oid reply_to) {
     }
     sqlite3_bind_blob(stmt,1,comment_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,2,comment_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt,3,time(0));
+    sqlite3_bind_int(stmt,3,commit_time);
     sqlite3_bind_blob(stmt,4,issue_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,5,reply_to.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sql = "UPDATE Issues SET EntryID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,comment_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -275,6 +311,18 @@ int add_reaction_to_cob_db (Oid reaction_id, Oid issue_id, Oid reply_to) {
     sqlite3_bind_int(stmt,2,time(0));
     sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,4,reply_to.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sql = "UPDATE Issues SET EntryID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,reaction_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -353,7 +401,7 @@ int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, const char* author, const c
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "INSERT INTO Issues (ID, RID, EditID, Author, Status) VALUES (?, ?, ?, ?, ?);";
+    const char* sql = "INSERT INTO Issues (ID, RID, EntryID, EditID, Author, Status) VALUES (?, ?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
@@ -361,8 +409,9 @@ int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, const char* author, const c
     sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,2,repo_oid.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,4,author,-1,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,5,status,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,4,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,5,author,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,6,status,-1,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -381,13 +430,14 @@ int edit_issue_in_cob_db (Oid issue_id, Oid edit_id) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "UPDATE Issues SET EditID = ? WHERE ID = ?;";
+    const char* sql = "UPDATE Issues SET EntryID = ?, EditID = ? WHERE ID = ?;";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
     sqlite3_bind_blob(stmt,1,edit_id.id,20,SQLITE_TRANSIENT);
-    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,edit_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -397,7 +447,7 @@ int edit_issue_in_cob_db (Oid issue_id, Oid edit_id) {
     return 0;
 }
 
-int edit_comment_in_cob_db (Oid comment_id, Oid edit_id) {
+int edit_comment_in_cob_db (Oid comment_id, Oid edit_id, uint64_t commit_time) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -446,7 +496,7 @@ int delete_issue_from_cob_db (Oid issue_id) {
     return 0;
 }
 
-int update_assignees_in_cob_db (Oid issue_id, SimpleSet* assignees) {
+int update_assignees_in_cob_db (Oid issue_id, SimpleSet* assignees, Oid entry_id) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -486,11 +536,23 @@ int update_assignees_in_cob_db (Oid issue_id, SimpleSet* assignees) {
 	}
     }
     sqlite3_finalize(stmt);
+    sql = "UPDATE Issues SET EntryID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,entry_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
     return 0;
 }
 
-int update_labels_in_cob_db (Oid issue_id, SimpleSet* labels) {
+int update_labels_in_cob_db (Oid issue_id, SimpleSet* labels, Oid entry_id) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -530,11 +592,23 @@ int update_labels_in_cob_db (Oid issue_id, SimpleSet* labels) {
 	}
     }
     sqlite3_finalize(stmt);
+    sql = "UPDATE Issues SET EntryID = ? WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,entry_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,2,issue_id.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
     return 0;
 }
 
-int update_state_in_cob_db (Oid issue_id, IssueState state) {
+int update_state_in_cob_db (Oid issue_id, IssueState state, Oid entry_id) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -543,14 +617,15 @@ int update_state_in_cob_db (Oid issue_id, IssueState state) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "UPDATE Issues SET Status = ?, Reason = ? WHERE ID = ?;";
+    const char* sql = "UPDATE Issues SET Status = ?, Reason = ?, EntryID = ? WHERE ID = ?;";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
     sqlite3_bind_text(stmt,1,state.status,-1,SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt,2,state.reason,-1,SQLITE_TRANSIENT);
-    sqlite3_bind_blob(stmt,3,issue_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,3,entry_id.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_blob(stmt,4,issue_id.id,20,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -558,6 +633,75 @@ int update_state_in_cob_db (Oid issue_id, IssueState state) {
     sqlite3_finalize(stmt);
     sqlite3_close(db);
     return 0;
+}
+
+int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
+    char buf [HEXSIZ];
+    iprintf("do update issue with entry %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
+    while (1) {
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&issue_entry)) {
+	    eprintf("failed to lookup git commit");
+	    return 1;
+	}
+	git_tree* tree = 0;
+	if (git_commit_tree(&tree,commit)) {
+	    eprintf("failed to get tree associated with a git commit");
+	    return 1;
+	}
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
+	    eprintf("Can't find the git tree entry 0 for the commit %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
+	    return 1;
+	}
+	const Oid* poid_0 = git_tree_entry_id(tree_entry);
+	if (!poid_0) {
+	    eprintf("Can't find oid of git tree entry");
+	    return 1;
+	}
+	git_blob* blob = 0;
+	if (git_blob_lookup(&blob,rrepo.repo,poid_0)) {
+	    eprintf("Can't lookup blob corresponding to git oid");
+	    return 1;
+	}
+	const uint8_t* blob_content = git_blob_rawcontent(blob);
+	iprintf("blob_content = %s",(char*)blob_content);
+    }
+
+    // make issue ref point to the entry
+}
+
+bool issue_entry_in_cob_db (Oid issue_entry) {
+    char buf [HEXSIZ];
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    iprintf("select * from issues where editid = %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
+    const char* sql = "SELECT * FROM Issues WHERE EntryID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,issue_entry.id,20,SQLITE_TRANSIENT);
+    int ret = 0;
+    bool match = false;
+    while (1) {
+	ret = sqlite3_step(stmt);
+	if (ret == SQLITE_ROW) match = true;
+	else break;
+    }
+    if (ret != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return match;
 }
 
 int issue_open (char* title, char* desc) {
@@ -630,18 +774,26 @@ int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t re
 	eprintf("failed to comment on cob issue");
 	return 1;
     }
+    // get commit time
+    git_commit* commit = 0;
+    if (git_commit_lookup(&commit,rrepo.repo,&re.oid)) {
+	eprintf("failed to lookup git commit");
+	return 1;
+    }
+    git_time_t commit_time = git_commit_time(commit);
+    //int time_offset = git_commit_time_offset(commit); //todo: not needed?
     if (edit_hexlen) {
-	if (edit_comment_in_cob_db(edit,re.oid)) {
+	if (edit_comment_in_cob_db(edit,re.oid,commit_time)) {
 	    eprintf("failed to edit comment in cob db");
 	    return 1;
 	}
 	iprintf("comment %s edited",git_oid_tostr(buf,HEXSIZ,&edit));
     }
     else {
-	if (add_comment_to_cob_db(re.oid,issue_id,reply_to)) { // todo handle case of edit
+	if (add_comment_to_cob_db(re.oid,issue_id,reply_to,commit_time)) { // todo handle case of edit
 	    eprintf("failed to add comment to cob db");
 	    return 1;
-	}
+	} //todo update Issues table with EditID
 	iprintf("comment %s created",git_oid_tostr(buf,HEXSIZ,&re.oid));
     }
     return 0;
@@ -697,7 +849,7 @@ int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSe
 	eprintf("failed to assign cob issue");
 	return 1;
     }
-    if (update_assignees_in_cob_db(issue_id,&assignees2)) {
+    if (update_assignees_in_cob_db(issue_id,&assignees2,re.oid)) {
 	eprintf("failed to update assignees in cob db");
 	return 1;
     }
@@ -755,7 +907,7 @@ int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet
 	eprintf("failed to label cob issue");
 	return 1;
     }
-    if (update_labels_in_cob_db(issue_id,&labels2)) {
+    if (update_labels_in_cob_db(issue_id,&labels2,re.oid)) {
 	eprintf("failed to update labels in cob db");
 	return 1;
     }
@@ -836,7 +988,7 @@ int issue_state (Oid issue_id, size_t issue_id_hexlen, IssueState state) {
 	eprintf("failed to react on cob issue");
 	return 1;
     }
-    if (update_state_in_cob_db(issue_id,state)) {
+    if (update_state_in_cob_db(issue_id,state,re.oid)) {
 	eprintf("failed to update state in cob db");
 	return 1;
     }
@@ -915,4 +1067,41 @@ int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc) {
     }
     iprintf("edit %s performed",git_oid_tostr(buf,HEXSIZ,&re.oid));
     return 0;
+}
+
+int issue_list (SimpleSet* assigned, IssueState state) {
+    rad_git_init();
+    RadRepo rrepo = rad_repo_default();
+    if (get_rad_repo_from_cwd(&rrepo)) {
+	eprintf("failed to get rad repo from cwd");
+	return 1;
+    }
+    //Pubkey signer = profile_get_pubkey();
+    SimpleSet issues;
+    set_init(&issues);
+    if (get_cobs(&issues,COB_ISSUE,rrepo)) {
+	eprintf("failed to get list of issues");
+	return 1;
+    }
+    size_t n_issues = 0;
+    char** issues_list = set_to_array(&issues,&n_issues);
+    for (int i=0; i<n_issues; i++) {
+	iprintf("issue entry %s",issues_list[i]);
+	//check if entry in DB
+	Oid issue_entry = {{0}};
+	if (git_oid_fromstr(&issue_entry,issues_list[i])) {
+	    eprintf("failed to get Oid from hex string");
+	    return 1;
+	}
+	if (!issue_entry_in_cob_db(issue_entry)) { // if not, update the db
+	    if (update_issue_in_cob_db(issue_entry,rrepo)) {
+		eprintf("failed to update issue in cob db");
+		return 1;
+	    }
+	}
+    }
+}
+
+int issue_show (Oid issue_id, size_t issue_id_hexlen) {
+    iprintf("in issue show");
 }

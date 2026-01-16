@@ -284,6 +284,10 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	free(privkeyfile);
 	return false;
     }
+    if (chmod(privkeyfile,strtol("0600",0,8))) {
+	eprintf("chmod failed");
+	return false;
+    }
 
     char* pubkeyfile = malloc(strlen(keydir)+13);
     strcpy(pubkeyfile,keydir);
@@ -351,7 +355,7 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	    eprintf("failed to open cob db");
 	    return 1;
 	}
-	const char* sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EditID BLOB, Author TEXT, Status TEXT, Reason TEXT);";
+	const char* sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EntryID BLOB, EditID BLOB, Author TEXT, Status TEXT, Reason TEXT);";
 	char* err_msg = 0;
 	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
 	    eprintf("failed to execute sql command: %s",err_msg);
