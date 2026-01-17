@@ -1,10 +1,71 @@
 #include <string.h>
 #include <stdio.h>
+#include <sqlite3.h>
 
 #include <rad.h>
 #include <repo.h>
 #include <profile.h>
 #include <print.h>
+
+int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed) {
+    iprintf("in update_allowed_in_cob_db");
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "DELETE FROM Allowed WHERE RID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    sqlite3_finalize(stmt);
+    sql = "INSERT INTO Allowed (RID, DID) VALUES (?,?);";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    size_t n_delegates = 0;
+    char** delegates_list = set_to_array(delegates,&n_delegates);
+    iprintf("n_delegates = %lu",n_delegates);
+    for (size_t i=0; i<n_delegates; i++) {
+	sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt,2,delegates_list[i],-1,SQLITE_TRANSIENT);
+	if (sqlite3_step(stmt) != SQLITE_DONE) {
+	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	    return 1;
+	}
+	if (sqlite3_reset(stmt) != SQLITE_OK) {
+	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	    return 1;
+	}
+    }
+    size_t n_allowed = 0;
+    char** allowed_list = set_to_array(allowed,&n_allowed);
+    for (size_t i=0; i<n_allowed; i++) {
+	sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt,2,allowed_list[i],-1,SQLITE_TRANSIENT);
+	if (sqlite3_step(stmt) != SQLITE_DONE) {
+	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	    return 1;
+	}
+	if (sqlite3_reset(stmt) != SQLITE_OK) {
+	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	    return 1;
+	}
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return 0;
+}
 
 RadProjectResult rad_project_init (git_repository* repo, const char* name, const char* description, const char* default_branch, const Visibility visibility, Pubkey signer, const Storage storage) {
     RadProjectResult res;
@@ -63,6 +124,20 @@ RadRepoResult rad_repo_init (const Document doc, const Storage s, const Pubkey s
     Oid commit = document_init(doc,rrepo.repo,signer);
     if (git_oid_is_zero(&commit)) {
 	eprintf("failed to initialize document");
+	return rrepo_res;
+    }
+
+    SimpleSet delegates;
+    set_init(&delegates);
+    SimpleSet allowed;
+    set_init(&allowed);
+    for (size_t i=0; i<doc.n_delegates; i++) {
+	iprintf("delegate %lu = %s",i,pubkey_to_did(doc.delegates[i].bytes));
+	set_add_str(&delegates,pubkey_to_did(doc.delegates[i].bytes));
+    }
+    for (size_t i=0; i<doc.n_allow; i++) set_add_str(&allowed,pubkey_to_did(doc.allow[i].bytes));
+    if (update_allowed_in_cob_db(rrepo.rid,&delegates,&allowed)) {
+	eprintf("failed to update allowed list in cob db");
 	return rrepo_res;
     }
     

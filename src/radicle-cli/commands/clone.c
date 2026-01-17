@@ -47,45 +47,46 @@ int clone_run (Command c) {
     if (cmd.err) {
 	return 1;
     }
-    char* argv [7];
-    argv[0] = "rad";
-    argv[1] = "clone";
-    int i = 0;
-    if (cmd.seed) {
-	argv[2] = "-s";
-	argv[3] = cmd.seed;
-	i += 2;
+    const char* clone_dir = 0;
+    char* rid_str = 0;
+    if (cmd.seed) { // clone directory from the seed using _crad_
+	iprintf("cloning directly from %s",cmd.seed);
     }
-    char* rid_str = strdup(c.argv[i]);
-    argv[i+2] = rid_str; // must be in format rad:zyx...cba
-    if (c.argc > i+1) {
-	argv[i+3] = strdup(c.argv[i+1]);
-    }
-    else {
-	argv[i+3] = strdup(rid_str+4);
-    }
-    argv[i+4] = 0;
-    if (exec_command("rad",argv)) {
-	eprintf("rad clone command failed");
-	return 1;
-    }
-    const char* clone_dir = argv[3];
-
-    const char* rad_home = get_rad_node_home();
-    const char* crad_home = get_rad_home();
-    char* rad_repo_path = malloc(strlen(rad_home)+128);
-    char* crad_repo_path = malloc(strlen(crad_home)+128);
-    sprintf(rad_repo_path,"%s/storage/%s",rad_home,argv[2]+4);
-    sprintf(crad_repo_path,"%s/storage/%s",crad_home,argv[2]+4);
-    
-    argv[0] = "cp";
-    argv[1] = "-a";
-    argv[2] = rad_repo_path;
-    argv[3] = crad_repo_path;
-    argv[4] = 0;
-    if (exec_command("cp",argv)) {
-	eprintf("cp command failed");
-	return 1;
+    else { // use _rad_
+	char* argv [7];
+	argv[0] = "rad";
+	argv[1] = "clone";
+	rid_str = strdup(c.argv[0]);
+	argv[2] = rid_str; // must be in format rad:zyx...cba
+	if (c.argc > 1) {
+	    argv[3] = strdup(c.argv[1]);
+	}
+	else {
+	    argv[3] = strdup(rid_str+4);
+	}
+	argv[4] = 0;
+	if (exec_command("rad",argv)) {
+	    eprintf("rad clone command failed");
+	    return 1;
+	}
+	clone_dir = argv[3];
+	
+	const char* rad_home = get_rad_node_home();
+	const char* crad_home = get_rad_home();
+	char* rad_repo_path = malloc(strlen(rad_home)+128);
+	char* crad_repo_path = malloc(strlen(crad_home)+128);
+	sprintf(rad_repo_path,"%s/storage/%s",rad_home,argv[2]+4);
+	sprintf(crad_repo_path,"%s/storage/%s",crad_home,argv[2]+4);
+	
+	argv[0] = "cp";
+	argv[1] = "-a";
+	argv[2] = rad_repo_path;
+	argv[3] = crad_repo_path;
+	argv[4] = 0;
+	if (exec_command("cp",argv)) {
+	    eprintf("cp command failed");
+	    return 1;
+	}
     }
     
     char cwd [1024];

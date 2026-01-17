@@ -235,10 +235,10 @@ int id_update (char* title, char* desc, SimpleSet* delegate, SimpleSet* rescind,
 	eprintf("failed to update id cob");
 	return 1;
     }
-    /*if (add_id_to_cob_db(re.oid,pubkey_to_did(signer.bytes),"open")) {
+    if (update_allowed_in_cob_db(rrepo.rid,&delegates2,&allowed2)) {
 	eprintf("failed to add id to cob db");
 	return 1;
-	}*/
+    }
     iprintf("identity cob updated");
     return 0;
 }

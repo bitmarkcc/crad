@@ -355,8 +355,14 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	    eprintf("failed to open cob db");
 	    return 1;
 	}
-	const char* sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EntryID BLOB, EditID BLOB, Author TEXT, Status TEXT, Reason TEXT);";
+	const char* sql = "CREATE TABLE Allowed (RID BLOB, DID TEXT);";
 	char* err_msg = 0;
+	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
+	    eprintf("failed to execute sql command: %s",err_msg);
+	    return 1;
+	}
+	sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EntryID BLOB, EditID BLOB, Author TEXT, Status TEXT, Reason TEXT);";
+	err_msg = 0;
 	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
 	    eprintf("failed to execute sql command: %s",err_msg);
 	    return 1;

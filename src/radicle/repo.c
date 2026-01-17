@@ -8,6 +8,7 @@
 #include <util.h>
 #include <print.h>
 #include <set.h>
+#include <rad.h>
 
 const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
 
@@ -720,6 +721,11 @@ Oid rad_repo_validate (const char* path) {
 	    eprintf("a ref from local repo doesn't match with one in the rad repo");
 	    return rid;
 	}
+    }
+
+    // update Allowed list in cob db
+    if (update_allowed_in_cob_db(rrepo.rid,&delegates,&allowed)) {
+
     }
     
     rid = rid_candidate;

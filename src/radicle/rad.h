@@ -22,4 +22,6 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
 
 bool signer_is_delegate (RadRepo rrepo, Pubkey signer);
 
+int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed);
+
 #endif
