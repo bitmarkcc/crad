@@ -10,7 +10,7 @@
 #include <cob.h>
 #include <rad.h>
 
-IDCommand command_id_default() {
+IDCommand command_id_default () {
     IDCommand cmd;
     cmd.err = 0;
     cmd.title = 0;
