@@ -8,7 +8,6 @@
 #include <print.h>
 
 int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed) {
-    iprintf("in update_allowed_in_cob_db");
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -22,7 +21,7 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
 	eprintf("failed to prepare sql statement");
 	return 1;
     }
-    sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,1,oid_to_rid(rid),-1,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -35,9 +34,8 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
     }
     size_t n_delegates = 0;
     char** delegates_list = set_to_array(delegates,&n_delegates);
-    iprintf("n_delegates = %lu",n_delegates);
     for (size_t i=0; i<n_delegates; i++) {
-	sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt,1,oid_to_rid(rid),-1,SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt,2,delegates_list[i],-1,SQLITE_TRANSIENT);
 	if (sqlite3_step(stmt) != SQLITE_DONE) {
 	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
@@ -51,7 +49,7 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
     size_t n_allowed = 0;
     char** allowed_list = set_to_array(allowed,&n_allowed);
     for (size_t i=0; i<n_allowed; i++) {
-	sqlite3_bind_blob(stmt,1,rid.id,20,SQLITE_TRANSIENT);
+	sqlite3_bind_text(stmt,1,oid_to_rid(rid),-1,SQLITE_TRANSIENT);
 	sqlite3_bind_text(stmt,2,allowed_list[i],-1,SQLITE_TRANSIENT);
 	if (sqlite3_step(stmt) != SQLITE_DONE) {
 	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
@@ -131,10 +129,7 @@ RadRepoResult rad_repo_init (const Document doc, const Storage s, const Pubkey s
     set_init(&delegates);
     SimpleSet allowed;
     set_init(&allowed);
-    for (size_t i=0; i<doc.n_delegates; i++) {
-	iprintf("delegate %lu = %s",i,pubkey_to_did(doc.delegates[i].bytes));
-	set_add_str(&delegates,pubkey_to_did(doc.delegates[i].bytes));
-    }
+    for (size_t i=0; i<doc.n_delegates; i++) set_add_str(&delegates,pubkey_to_did(doc.delegates[i].bytes));
     for (size_t i=0; i<doc.n_allow; i++) set_add_str(&allowed,pubkey_to_did(doc.allow[i].bytes));
     if (update_allowed_in_cob_db(rrepo.rid,&delegates,&allowed)) {
 	eprintf("failed to update allowed list in cob db");
