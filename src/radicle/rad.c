@@ -235,7 +235,7 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
 	return 1;
     }
 
-    // Set upstream
+    // Set upstream (for git repo)
     if (rad_repo_set_upstream(repo,default_branch)) {
 	fprintf(stderr,"Failed to set upstream\n");
 	return 1;

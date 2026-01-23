@@ -10,6 +10,7 @@
 #include <commands/issue.h>
 #include <commands/id.h>
 #include <commands/self.h>
+#include <commands/sync.h>
 
 Command parse_args(int argc, char** argv) {
     
@@ -74,6 +75,7 @@ void print_help() {
     printf("  init\n");
     printf("  issue\n");
     printf("  self\n");
+    printf("  sync\n");
     printf("  validate\n");
     // Add more help info as needed
 }
@@ -128,6 +130,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"self")) {
 		return self_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"sync")) {
+		return sync_run(subcommand);
 	    }
 	    else {
 		eprintf("invalid command (%s)",exe);

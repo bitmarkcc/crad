@@ -473,3 +473,31 @@ bool password_loaded() {
     }
     return false;
 }
+
+int load_cleartext_privkey_file (const char* rad_home) {
+    ssh_key key = 0;
+    if (profile_get_privkey(&key)) {
+	eprintf("failed to get privkey");
+	return 1;
+    }
+    char* privkey_fname = malloc(strlen(rad_home)+17);
+    sprintf(privkey_fname,"%s/.pw/radicle.key",rad_home);
+    int rc = ssh_pki_export_privkey_file_format(key,0,0,0,privkey_fname,SSH_FILE_FORMAT_OPENSSH); // null pword
+    if (rc != SSH_OK) {
+	eprintf("failed to write to a private key file\n");
+	return 1;
+    }
+    if (chmod(privkey_fname,strtol("0600",0,8))) {
+	eprintf("chmod failed");
+	return false;
+    }
+}
+
+int unload_cleartext_privkey_file (const char* rad_home) {
+    char* privkey_fname = malloc(strlen(rad_home)+17);
+    sprintf(privkey_fname,"%s/.pw/radicle.key",rad_home);
+    if (remove(privkey_fname)) {
+	eprintf("failed to delete cleartext private key");
+	return 1;
+    }
+}

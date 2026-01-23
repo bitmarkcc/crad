@@ -1,3 +1,5 @@
+//#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -193,7 +195,7 @@ int exec_command (const char* file, char* const argv []) {
 	return 1;
     case 0:
 	//setpgrp(); //todo check if needed
-	int fd = open("/dev/null",O_WRONLY);
+	/*int fd = open("/dev/null",O_WRONLY);
 	if (!fd) {
 	    fprintf(stderr,"failed to open /dev/null for writing\n");
 	    return 1;
@@ -205,7 +207,7 @@ int exec_command (const char* file, char* const argv []) {
 	if (dup2(fd,2)<0) {
 	    fprintf(stderr,"failed to redirect stderr to /dev/null\n");
 	    return 1;
-	}   
+	    }*/
 	return execvp(file,argv);
     default:
 	int status;
@@ -222,8 +224,79 @@ int exec_command (const char* file, char* const argv []) {
 	}
 	else {
 	    fprintf(stderr,"%s command ended abnormaly\n",argv[0]);
+	}	
+	return 0;
+    }
+}
+
+int exec_command_inp (const char* file, char* const argv [], const char* inp) {
+
+    int pipefds [2];
+    if (pipe(pipefds)) {
+	eprintf("failed to create pipe");
+	return 1;
+    }
+    
+    int pid = fork();
+    switch (pid) {
+    case -1:
+	fprintf(stderr,"fork failed");
+	return 1;
+    case 0:	
+	int fd = open("/dev/null",O_WRONLY);
+	if (!fd) {
+	    fprintf(stderr,"failed to open /dev/null for writing\n");
+	    return 1;
 	}
-	
+	if (dup2(fd,1)<0) {
+	    fprintf(stderr,"failed to redirect stdout to /dev/null\n");
+	    return 1;
+	}
+	if (dup2(fd,2)<0) {
+	    fprintf(stderr,"failed to redirect stderr to /dev/null\n");
+	    return 1;
+	}
+	if (dup2(pipefds[0],STDIN_FILENO)<0) {
+	    eprintf("failed redirect stdin to pipe read end");
+	    return 1;
+	}
+	if (close(pipefds[0])) {
+	    eprintf("failed to close read-end of pipe");
+	    return 1;
+	}
+	if (close(pipefds[1])) {
+	    eprintf("failed to close write-end of pipe");
+	    return 1;
+	}
+	return execvp(file,argv);
+    default:
+	if (close(pipefds[0])) {
+	    eprintf("failed to close read-end of pipe");
+	    return 1;
+	}
+	if (write(pipefds[1],inp,strlen(inp)) < 0) {
+	    eprintf("failed to write to write-end of pipe");
+	    return 1;
+	}
+	if (close(pipefds[1])) {
+	    eprintf("failed to close write-end of pipe");
+	    return 1;
+	}
+	int status;
+	if (waitpid(pid,&status,0)<0) {
+	    fprintf(stderr,"waitpid failed\n");
+	    return 1;
+	}
+	if (WIFEXITED(status)) {
+	    int es = WEXITSTATUS(status);
+	    if (es) {
+		fprintf(stderr,"%s command exit status is %d\n",argv[0],es);
+		return 1;
+	    }
+	}
+	else {
+	    fprintf(stderr,"%s command ended abnormaly\n",argv[0]);
+	}
 	return 0;
     }
 }

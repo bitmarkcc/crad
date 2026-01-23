@@ -28,4 +28,9 @@ Storage profile_get_storage ();
 
 bool password_loaded ();
 
+char* profile_get_password (const char* rad_home);
+
+int load_cleartext_privkey_file (const char* rad_home);
+int unload_cleartext_privkey_file (const char* rad_home);
+
 #endif

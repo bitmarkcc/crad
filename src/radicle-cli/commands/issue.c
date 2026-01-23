@@ -233,7 +233,7 @@ int issue_run (Command c) {
     else if (c.argc > 0 && !strcmp(c.argv[0],"list")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
 	if (cmd.err) return 1;
-	return issue_list(&cmd.assigned,cmd.state);
+	return issue_list();
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"show")) {
 	Oid issue_id = {{0}};
@@ -638,37 +638,124 @@ int update_state_in_cob_db (Oid issue_id, IssueState state, Oid entry_id) {
 int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
     char buf [HEXSIZ];
     iprintf("do update issue with entry %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
-    while (1) {
+    if (issue_entry_in_cob_db(issue_entry)) return 0;
+
+    /*sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    char* sql = 0;*/
+    Oid entry = issue_entry;
+    size_t entries_to_apply_capacity = 16;
+    Oid* entries_to_apply = malloc(entries_to_apply_capacity*sizeof(Oid));
+    size_t n_entries_to_apply = 0;
+    bool passed_entry_in_cob_db = false;
+    Oid issue_id = {{0}};
+
+    do {
+	if (!passed_entry_in_cob_db) {
+	    if (n_entries_to_apply>=entries_to_apply_capacity) {
+		entries_to_apply_capacity *= 2;
+		entries_to_apply = realloc(entries_to_apply,entries_to_apply_capacity*sizeof(Oid));
+	    }
+	    entries_to_apply[n_entries_to_apply] = entry;
+	    n_entries_to_apply++;
+	}
 	git_commit* commit = 0;
-	if (git_commit_lookup(&commit,rrepo.repo,&issue_entry)) {
+	if (git_commit_lookup(&commit,rrepo.repo,&entry)) {
 	    eprintf("failed to lookup git commit");
 	    return 1;
 	}
-	git_tree* tree = 0;
-	if (git_commit_tree(&tree,commit)) {
-	    eprintf("failed to get tree associated with a git commit");
+	unsigned int parent_count = git_commit_parentcount(commit);
+	if (parent_count < 2) {
+	    issue_id = entry;
+	    break;
+	}
+	const Oid* pparent_oid = git_commit_parent_id(commit,0);
+	if (!pparent_oid) {
+	    eprintf("failed to get parent oid of an issue entry");
 	    return 1;
 	}
-	git_tree_entry* tree_entry = 0;
-	if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
-	    eprintf("Can't find the git tree entry 0 for the commit %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
+	entry = *pparent_oid;
+	if (!passed_entry_in_cob_db && issue_entry_in_cob_db(entry)) {
+	    passed_entry_in_cob_db = true;
+	}
+    } while (1);
+
+    iprintf("n_entries_to_apply = %lu",n_entries_to_apply);
+    
+    for (int i=n_entries_to_apply-1; i>=0; i--) {
+	Oid entry_id = entries_to_apply[i];
+	iprintf("i=%d apply entry %s",i,git_oid_tostr(buf,HEXSIZ,&entry_id));
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&entry_id)) {
+	    eprintf("failed to lookup git commit");
 	    return 1;
 	}
-	const Oid* poid_0 = git_tree_entry_id(tree_entry);
-	if (!poid_0) {
-	    eprintf("Can't find oid of git tree entry");
-	    return 1;
+	unsigned int parent_count = git_commit_parentcount(commit);
+	if (parent_count < 2) { // new issue
+	    const git_signature* git_author = git_commit_author(commit);
+	    char author [128];
+	    sprintf(author,"did:key:%s",rad_email_get_domain(git_author->email));
+
+	    if (add_issue_to_cob_db(entry_id,rrepo.rid,author,"open")) {
+		eprintf("failed to add issue to cob db");
+		return 1;
+	    }
 	}
-	git_blob* blob = 0;
-	if (git_blob_lookup(&blob,rrepo.repo,poid_0)) {
-	    eprintf("Can't lookup blob corresponding to git oid");
-	    return 1;
+	else {	
+	    git_tree* tree = 0;
+	    if (git_commit_tree(&tree,commit)) {
+		eprintf("failed to get tree from git commit");
+		return 1;
+	    }
+	    git_tree_entry* tree_entry = 0;
+	    if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
+		eprintf("Can't find the git tree entry 0");
+		return 1;
+	    }
+	    const Oid* poid_0 = git_tree_entry_id(tree_entry);
+	    if (!poid_0) {
+		eprintf("Can't find oid of git tree entry");
+		return 1;
+	    }
+	    git_blob* blob = 0;
+	    if (git_blob_lookup(&blob,rrepo.repo,poid_0)) {
+		eprintf("can't lookup blob corresponding to git oid");
+		return 1;
+	    }
+	    const uint8_t* blob_content = git_blob_rawcontent(blob);
+	    iprintf("blob_content %s",(char*)blob_content);
+	    json_object* content_0 = json_tokener_parse((char*)blob_content);
+	    json_object* val_type = 0;
+	    json_object_object_get_ex(content_0,"type",&val_type);
+	    const char* type = rad_strip('"',json_object_to_json_string(val_type));
+	    iprintf("type = %s",type);
+	    
+	    if (!strcmp(type,"comment")) {
+		json_object* val_reply_to = 0;
+		json_object_object_get_ex(content_0,"reply_to",&val_reply_to);
+		Oid reply_to = {{0}};
+		if (git_oid_fromstr(&reply_to,rad_strip('"',json_object_to_json_string(val_reply_to)))) {
+		    eprintf("failed to convert string to git oid");
+		    return 1;
+		}
+		if (add_comment_to_cob_db(entry_id,issue_id,reply_to,git_commit_time(commit))) { // todo handle case of edit
+		    eprintf("failed to add comment to cob db");
+		    return 1;
+		}
+	    }
 	}
-	const uint8_t* blob_content = git_blob_rawcontent(blob);
-	iprintf("blob_content = %s",(char*)blob_content);
     }
 
-    // make issue ref point to the entry
+    //sqlite3_close(db);
+  
+    // make issue ref point to the entry ??
+    return 0;
 }
 
 bool issue_entry_in_cob_db (Oid issue_entry) {
@@ -681,7 +768,7 @@ bool issue_entry_in_cob_db (Oid issue_entry) {
 	eprintf("failed to open cob db");
 	return 1;
     }
-    iprintf("select * from issues where editid = %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
+    iprintf("select * from issues where entryid = %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
     const char* sql = "SELECT * FROM Issues WHERE EntryID = ?;";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
@@ -1069,7 +1156,7 @@ int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc) {
     return 0;
 }
 
-int issue_list (SimpleSet* assigned, IssueState state) {
+int issue_list () {
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
     if (get_rad_repo_from_cwd(&rrepo)) {

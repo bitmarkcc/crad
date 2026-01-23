@@ -186,7 +186,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	}
 	root_doc_oid = *poid_entry;
     }
-    for (size_t i=n_commit_oids-1; i>=1; i--) { // Now backtrack and check sigs
+    for (int i=n_commit_oids-1; i>=1; i--) { // Now backtrack and check sigs
 	if (git_commit_lookup(&parent,repo,commit_oids+i)) {
 	    eprintf("failed to lookup commit from git repo");
 	    return ret;

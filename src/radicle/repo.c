@@ -560,17 +560,17 @@ Oid rad_repo_validate (const char* path) {
 	}
 	git_tree* tree = 0;
 	if (git_commit_tree(&tree,commit)) {
-	    fprintf(stderr,"Failed to get tree associated with a git commit\n");
+	    fprintf(stderr,"Failed to get tree associated with a git commit");
 	    return rid;
 	}
 	git_tree_entry* tree_entry = 0;
 	if (git_tree_entry_bypath(&tree_entry,tree,"refs")) {
-	    eprintf("Can't find the git tree entry refs for the rad/sigrefs ref\n");
+	    eprintf("Can't find the git tree entry refs for the rad/sigrefs ref");
 	    return rid;
 	}
 	const Oid* poid_refs = git_tree_entry_id(tree_entry);
 	if (!poid_refs) {
-	    eprintf("Can't find oid of git tree entry\n");
+	    eprintf("Can't find oid of git tree entry");
 	    return rid;
 	}
 	git_blob* blob = 0;

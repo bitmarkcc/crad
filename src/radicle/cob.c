@@ -75,12 +75,16 @@ int transaction_issue_add_assign (IssueTransaction* tx, Oid issue_id, SimpleSet*
     IssueAction action = action_issue_default();
     action.type = ISSUE_ACTION_ASSIGN;
     action.assignees = assignees;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
 }
 
 int transaction_issue_add_label (IssueTransaction* tx, Oid issue_id, SimpleSet* labels) {
     IssueAction action = action_issue_default();
     action.type = ISSUE_ACTION_LABEL;
     action.labels = labels;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
 }
 
 int transaction_issue_add_react (IssueTransaction* tx, Oid reply_to, char emoji [4]) {
@@ -96,6 +100,8 @@ int transaction_issue_add_state (IssueTransaction* tx, IssueState state) {
     IssueAction action = action_issue_default();
     action.type = ISSUE_ACTION_LIFECYCLE;
     action.state = state;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
 }
 
 int transaction_issue_add_edit (IssueTransaction* tx, Oid issue_id, char* title, char* desc) {
@@ -662,7 +668,7 @@ int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo) {
 	    if (!strcmp(root_cobs_list[i],basename(strdup(cob_refs_list[j])))) {
 		Oid entry_oid = {{0}};
 		if (git_reference_name_to_id(&entry_oid,rrepo.repo,cob_refs_list[j])) {
-		    eprintf("failed to get from reference name: %s",cob_refs_list[j]);
+		    eprintf("failed to get oid from reference name: %s",cob_refs_list[j]);
 		    return 1;
 		}
 		git_commit* commit = 0;
