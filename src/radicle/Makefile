@@ -3,4 +3,4 @@ all:
 	gcc -shared -o libradicle.so *.o
 
 clean:
-	rm -f *~ *.o *.so
+	rm -f *~ cob/*~ *.o *.so

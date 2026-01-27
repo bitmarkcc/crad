@@ -312,13 +312,33 @@ RepoEntry update_cob_issue (RadRepo rrepo, char* message, IssueAction* actions, 
     RepoEntry re;
     re.oid = zero;
     // get first parent
-    char refname [128];
-    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    const char* refname = 0;
     Oid parent_oid = {{0}};
-    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.issue/%s",did_raw,git_oid_tostr(buf,HEXSIZ,&issue_id));
-    if (git_reference_name_to_id(&parent_oid,rrepo.repo,refname)) {
-	eprintf("failed to lookup oid from git reference name %s",refname);
+    char glob [256];
+    sprintf(glob,"refs/namespaces/*/refs/cobs/xyz.radicle.issue/%s",git_oid_tostr(buf,HEXSIZ,&issue_id));
+    git_reference_iterator* refit = 0;
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
 	return re;
+    }
+    uint64_t latest_entry_time = 0;
+    int ret = 0;
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	Oid entry_id = {{0}};
+	if (git_reference_name_to_id(&entry_id,rrepo.repo,refname)) {
+	    eprintf("failed to get oid from reference name: %s",refname);
+	    return re;
+	}
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&entry_id)) {
+	    eprintf("failed to lookup git commit");
+	    return re;
+	}
+	git_time_t commit_time = git_commit_time(commit);
+	if (commit_time > latest_entry_time) {
+	    latest_entry_time = commit_time;
+	    parent_oid = entry_id;
+	}
     }
     Oid parents [2] = {parent_oid,get_root_identity_commit_oid(rrepo.repo)};
     size_t n_parents = 2;

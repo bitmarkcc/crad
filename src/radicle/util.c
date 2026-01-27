@@ -195,7 +195,7 @@ int exec_command (const char* file, char* const argv []) {
 	return 1;
     case 0:
 	//setpgrp(); //todo check if needed
-	/*int fd = open("/dev/null",O_WRONLY);
+	int fd = open("/dev/null",O_WRONLY);
 	if (!fd) {
 	    fprintf(stderr,"failed to open /dev/null for writing\n");
 	    return 1;
@@ -207,7 +207,7 @@ int exec_command (const char* file, char* const argv []) {
 	if (dup2(fd,2)<0) {
 	    fprintf(stderr,"failed to redirect stderr to /dev/null\n");
 	    return 1;
-	    }*/
+	}
 	return execvp(file,argv);
     default:
 	int status;
@@ -394,6 +394,19 @@ char* rad_str_with_line_size (const char* str, size_t n) { // assume str has no 
     }
     *out_it = 0;
     return out;
+}
+
+char* rad_email_get_user (const char* emailaddr) {
+    if (!emailaddr) return 0;
+    char* user = strdup(emailaddr);
+    char* it = user;
+    while (*it) {
+	if (*it == '@') {
+	    *it = 0;
+	    return user;
+	}
+	it++;
+    }
 }
 
 char* rad_email_get_domain (const char* emailaddr) {

@@ -361,13 +361,13 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	    eprintf("failed to execute sql command: %s",err_msg);
 	    return 1;
 	}
-	sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EntryID BLOB, EditID BLOB, Author TEXT, Status TEXT, Reason TEXT);";
+	sql = "CREATE TABLE Issues (ID BLOB PRIMARY KEY, RID BLOB, EntryID BLOB, EditID BLOB, Time INTEGER, Author TEXT, Status TEXT, Reason TEXT);";
 	err_msg = 0;
 	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
 	    eprintf("failed to execute sql command: %s",err_msg);
 	    return 1;
 	}
-	sql = "CREATE TABLE Comments (ID BLOB PRIMARY KEY, EditID BLOB, Time INTEGER, Issue BLOB, ReplyTo BLOB);";
+	sql = "CREATE TABLE Comments (ID BLOB PRIMARY KEY, EditID BLOB, Time INTEGER, Issue BLOB, ReplyTo BLOB, Author TEXT, Alias TEXT);";
 	err_msg = 0;
 	if (sqlite3_exec(db,sql,0,0,&err_msg)) {
 	    eprintf("failed to execute sql command: %s",err_msg);

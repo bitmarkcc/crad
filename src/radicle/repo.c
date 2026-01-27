@@ -427,7 +427,7 @@ Oid rid_of_rad_remote (git_repository* repo) {
     }
 }
 
-Oid rad_repo_validate (const char* path) {
+Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in the future. Also check if we need to validate signatures for each commit match with author
     Oid rid = {{0}};
     char buf [HEXSIZ];
 
@@ -725,7 +725,8 @@ Oid rad_repo_validate (const char* path) {
 
     // update Allowed list in cob db
     if (update_allowed_in_cob_db(rrepo.rid,&delegates,&allowed)) {
-
+	eprintf("failed to update allowed list in cob db");
+	return rid;
     }
     
     rid = rid_candidate;

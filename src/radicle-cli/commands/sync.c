@@ -120,7 +120,7 @@ int sync_run (Command c) {
 	sprintf(dst,"%s/storage/%s/",rad_home,rid_str);
 	argv[8] = dst;
 	argv[9] = 0;
-	iprintf("exec: %s -- %s -- %s -- %s -- %s -- %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3],argv[4],argv[5],argv[6],argv[7],argv[8]);
+	//iprintf("exec: %s -- %s -- %s -- %s -- %s -- %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3],argv[4],argv[5],argv[6],argv[7],argv[8]);
 
 	char* dst_dir = strdup(dst);
 	dst_dir[strlen(dst_dir)-1] = 0;

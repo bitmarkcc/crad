@@ -177,7 +177,7 @@ int clone_run (Command c) {
 	RadRepo rrepo;
 	rrepo.rid = rid_to_oid(rid_str+4);
 	rrepo.repo = 0;
-	char* rrepo_path = malloc(strlen(dst));
+	char* rrepo_path = malloc(strlen(dst)+1);
 	sprintf(rrepo_path,"%s",dst);
 	rrepo_path[strlen(dst)-1] = 0;
 	if (git_repository_open(&rrepo.repo,rrepo_path)) {

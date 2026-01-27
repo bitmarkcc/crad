@@ -53,6 +53,7 @@ uint8_t* rad_reverse_bytes (const uint8_t* bytes, size_t len);
 
 char* rad_str_with_line_size (const char* str, size_t n);
 
+char* rad_email_get_user (const char* emailaddr);
 char* rad_email_get_domain (const char* emailaddr);
 
 char* rad_str_remove_spaces (const char* str);
