@@ -254,11 +254,21 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     strcpy(keydir,rad_home);
     strcat(keydir,"/keys");
 
+    char* storagedir = malloc(strlen(rad_home)+9);
+    sprintf(storagedir,"%s/storage",rad_home);
+
     if (access(keydir,F_OK)) {
 	if (mkdir(keydir,0700)) {
 	    fprintf(stderr,"Can't create keys directory\n");
 	    free(rad_home);
 	    free(keydir);
+	    return false;
+	}
+    }
+
+    if (access(storagedir,F_OK)) {
+	if (mkdir(storagedir,0755)) {
+	    fprintf(stderr,"Can't create storage directory\n");
 	    return false;
 	}
     }

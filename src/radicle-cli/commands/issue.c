@@ -683,6 +683,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 
     do {
 	if (!passed_entry_in_cob_db) {
+	    iprintf("entry %s going to apply list",git_oid_tostr(buf,HEXSIZ,&entry));
 	    if (n_entries_to_apply>=entries_to_apply_capacity) {
 		entries_to_apply_capacity *= 2;
 		entries_to_apply = realloc(entries_to_apply,entries_to_apply_capacity*sizeof(Oid));
@@ -713,6 +714,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
     
     for (int i=n_entries_to_apply-1; i>=0; i--) {
 	Oid entry_id = entries_to_apply[i];
+	//iprintf("apply entry %s",git_oid_tostr(buf,HEXSIZ,&entry_id));
 	git_commit* commit = 0;
 	if (git_commit_lookup(&commit,rrepo.repo,&entry_id)) {
 	    eprintf("failed to lookup git commit");
@@ -872,6 +874,7 @@ bool issue_entry_in_cob_db (Oid issue_entry) {
 	return 1;
     }
     const char* sql = "SELECT * FROM Issues WHERE EntryID = ?;";
+    //iprintf("select * from issues where entryid = %s",git_oid_tostr(buf,HEXSIZ,&issue_entry));
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
@@ -1670,6 +1673,7 @@ int issue_list (SimpleSet* assigned, IssueState state) {
 	    return 1;
 	}
 	if (!issue_entry_in_cob_db(issue_entry)) { // if not, update the db
+	    //iprintf("issue entry %s not in cob db",git_oid_tostr(buf,HEXSIZ,&issue_entry));
 	    if (update_issue_in_cob_db(issue_entry,rrepo)) {
 		eprintf("failed to update issue in cob db");
 		return 1;
@@ -1820,6 +1824,87 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen) {
     if (state.reason && strlen(state.reason))
 	printf(" (%s)",state.reason);
     printf("\n\n");
-    printf("%s\n",get_issue_description(rrepo,issue_id));
+    printf("%s\n\n",get_issue_description(rrepo,issue_id));
     
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 1;
+    }
+    const char* sql = "SELECT ID, EditID, Time, ReplyTo, Author, Alias FROM Comments WHERE Issue = ? ORDER BY Time;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 1;
+    }
+    sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
+    int ret = 0;
+    while (1) {
+	ret = sqlite3_step(stmt);
+	if (ret == SQLITE_ROW) {
+	    Oid comment_id = {{0}};
+	    memcpy(comment_id.id,sqlite3_column_blob(stmt,0),20);
+	    Oid edit_id = {{0}};
+	    memcpy(edit_id.id,sqlite3_column_blob(stmt,1),20);
+	    time_t comment_time = sqlite3_column_int64(stmt,2);
+	    Oid reply_to = {{0}};
+	    memcpy(reply_to.id,sqlite3_column_blob(stmt,3),20);
+	    char* author = strdup((char*)sqlite3_column_text(stmt,4));
+	    author[17] = 0;
+	    const char* alias = strdup((char*)sqlite3_column_text(stmt,5));
+	    char* time_hr = strdup(ctime(&comment_time));
+	    time_hr[strlen(time_hr)-1] = 0;
+	    char comment_id_show [8];
+	    memcpy(comment_id_show,git_oid_tostr(buf,HEXSIZ,&comment_id),7);
+	    comment_id_show[7] = 0;
+	    char* reply_to_show = "";
+	    if (!git_oid_is_zero(&reply_to)) {
+		reply_to_show = malloc(17);
+		strcpy(reply_to_show,"reply-to ");
+		memcpy(reply_to_show+9,git_oid_tostr(buf,HEXSIZ,&reply_to),7);
+		reply_to_show[16] = 0;
+	    }
+	    printf("%s %s %s %s %s\n",alias,author+8,time_hr,comment_id_show,reply_to_show);
+
+	    git_commit* commit = 0;
+	    if (git_commit_lookup(&commit,rrepo.repo,&edit_id)) {
+		eprintf("failed to lookup git commit");
+		return 1;
+	    }
+	    git_tree* tree = 0;
+	    if (git_commit_tree(&tree,commit)) {
+		eprintf("failed to get tree from git commit");
+		return 1;
+	    }
+	    git_tree_entry* tree_entry = 0;
+	    if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
+		eprintf("Can't find the git tree entry 0");
+		return 1;
+	    }
+	    const Oid* poid = git_tree_entry_id(tree_entry);
+	    if (!poid) {
+		eprintf("Can't find oid of git tree entry");
+		return 1;
+	    }
+	    git_blob* blob = 0;
+	    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
+		eprintf("can't lookup blob corresponding to git oid");
+		return 0;
+	    }
+	    const uint8_t* blob_content = git_blob_rawcontent(blob);
+	    json_object* content_0 = json_tokener_parse((char*)blob_content);
+	    json_object* val_body = 0;
+	    json_object_object_get_ex(content_0,"body",&val_body);
+	    const char* body = json_object_get_string(val_body);
+	    printf("%s\n\n",body);
+	}
+	else break;
+    }
+    if (ret != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 1;
+    }
+    return 0;
 }
