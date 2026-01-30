@@ -463,3 +463,20 @@ char* rad_basename_dirname (const char* path) {
     char* dir_name = dirname(strdup(path));
     return basename(dir_name);
 }
+
+bool rad_line_in_file (const char* line, const char* filename) {
+    bool ret = false;
+    char* line_stripped = strdup(line);
+    rad_rstrip_nl(line_stripped);
+    FILE* f = fopen(filename,"r");
+    char curline [RAD_BUFSIZ];
+    while (fgets(curline,RAD_BUFSIZ,f)) {
+	rad_rstrip_nl(curline);
+	if (!strcmp(curline,line_stripped)) {
+	    ret = true;
+	    break;
+	}
+    }
+    fclose(f);
+    return ret;
+}

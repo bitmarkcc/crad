@@ -1,0 +1,39 @@
+#!/bin/bash
+
+rid="`echo $SSH_ORIGINAL_COMMAND | awk '{print $6}'`"
+rad_home="`crad self --home`"
+cd "$rad_home/cobs"
+results="`sqlite3 cache.db "SELECT * FROM Allowed WHERE DID = '$1' AND RID = '$rid';"`"
+if [[ -z "$results" ]]
+then
+    echo Unauthorized 1>&2
+    exit
+fi
+
+cmd1="`echo $SSH_ORIGINAL_COMMAND | awk '{print $1}'`"
+cmd2="`echo $SSH_ORIGINAL_COMMAND | awk '{print $2}'`"
+cmd3="`echo $SSH_ORIGINAL_COMMAND | awk '{print $3}'`"
+cmd4="`echo $SSH_ORIGINAL_COMMAND | awk '{print $4}'`"
+cmd5="`echo $SSH_ORIGINAL_COMMAND | awk '{print $5}'`"
+
+if [[ "$cmd1" != "rsync" ]]
+then
+    echo "Unauthorized command $cmd1" 1>&2
+    exit
+fi
+
+if [[ "$cmd2" != "--server" ]]
+then
+    echo "Unauthorized option $cmd2" 1>&2
+    exit
+fi
+
+if [[ "$cmd3" != "--sender" ]]
+then
+    echo "Unauthorized option $cmd3" 1>&2
+    exit
+fi
+
+cmd6="$rad_home/storage/$rid/"
+
+exec $cmd1 $cmd2 $cmd3 $cmd4 $cmd5 $cmd6

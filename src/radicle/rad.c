@@ -8,6 +8,13 @@
 #include <print.h>
 
 int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed) {
+
+    char* rad_home = get_rad_home();
+    char* authkeys_fname = malloc(strlen(rad_home)+22);
+    sprintf(authkeys_fname,"%s/.ssh/authorized_keys",rad_home);
+    FILE* f = fopen(authkeys_fname,"a");
+    char line [RAD_BUFSIZ];
+    
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -45,7 +52,19 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
 	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	    return 1;
 	}
-    }
+  	Pubkey pubkey;
+	pubkey.bytes = did_to_pubkey(delegates_list[i]);
+	char* b64_key = 0;
+	int rc = ssh_pki_export_pubkey_raw_base64(pubkey.bytes,&b64_key);
+	if (rc != SSH_OK) {
+	    eprintf("failed to export public key to base 64 format");
+	    return 1;
+	}	
+	sprintf(line,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",delegates_list[i],b64_key);
+	if (!rad_line_in_file(line,authkeys_fname)) {
+	    fputs(line,f);
+	}
+  }
     size_t n_allowed = 0;
     char** allowed_list = set_to_array(allowed,&n_allowed);
     for (size_t i=0; i<n_allowed; i++) {
@@ -59,9 +78,22 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
 	    eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	    return 1;
 	}
+	Pubkey pubkey;
+	pubkey.bytes = did_to_pubkey(allowed_list[i]);
+	char* b64_key = 0;
+	int rc = ssh_pki_export_pubkey_raw_base64(pubkey.bytes,&b64_key);
+	if (rc != SSH_OK) {
+	    eprintf("failed to export public key to base 64 format");
+	    return 1;
+	}	
+	sprintf(line,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",allowed_list[i],b64_key);
+	if (!rad_line_in_file(line,authkeys_fname)) {
+	    fputs(line,f);
+	}
     }
     sqlite3_finalize(stmt);
     sqlite3_close(db);
+    fclose(f);
     return 0;
 }
 

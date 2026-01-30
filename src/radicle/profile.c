@@ -257,6 +257,9 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     char* storagedir = malloc(strlen(rad_home)+9);
     sprintf(storagedir,"%s/storage",rad_home);
 
+    char* ssh_dir = malloc(strlen(rad_home)+6);
+    sprintf(ssh_dir,"%s/.ssh",rad_home);
+    
     if (access(keydir,F_OK)) {
 	if (mkdir(keydir,0700)) {
 	    fprintf(stderr,"Can't create keys directory\n");
@@ -269,6 +272,13 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     if (access(storagedir,F_OK)) {
 	if (mkdir(storagedir,0755)) {
 	    fprintf(stderr,"Can't create storage directory\n");
+	    return false;
+	}
+    }
+
+    if (access(ssh_dir,F_OK)) {
+	if (mkdir(ssh_dir,0755)) {
+	    eprintf("Can't create ssh directory");
 	    return false;
 	}
     }
