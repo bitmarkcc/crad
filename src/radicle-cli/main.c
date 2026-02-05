@@ -11,6 +11,8 @@
 #include <commands/id.h>
 #include <commands/self.h>
 #include <commands/sync.h>
+#include <commands/ls.h>
+#include <commands/inspect.h>
 
 Command parse_args(int argc, char** argv) {
     
@@ -73,7 +75,9 @@ void print_help() {
     printf("  clone\n");
     printf("  id\n");
     printf("  init\n");
+    printf("  inspect\n");
     printf("  issue\n");
+    printf("  ls\n");
     printf("  self\n");
     printf("  sync\n");
     printf("  validate\n");
@@ -133,6 +137,12 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"sync")) {
 		return sync_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"ls")) {
+		return ls_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"inspect")) {
+		return inspect_run(subcommand);
 	    }
 	    else {
 		eprintf("invalid command (%s)",exe);

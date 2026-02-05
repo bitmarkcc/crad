@@ -27,7 +27,7 @@ IDCommand command_id_default () {
 
 void print_help_id () {
     printf("crad id (Manage repository identities) Usage:\n");
-    printf("crad id update [--title <string>] [--desc <string>] [--delegate <did>] [--rescind <did>] [--threshold <num>] [--visibility <private | public>] [--allow <did>] [--disallow <did>]\n");
+    printf("crad id update [--title <string>] [--desc <string>] [--delegate <did>] [--rescind <did>] [--threshold <num>] [--visibility <private | public>] [--allow <did>] [--disallow <did>] [--payload <id> <key> <value>]\n");
 }
 
 IDCommand parse_args_id (int argc, char** argv) {

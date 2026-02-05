@@ -62,4 +62,6 @@ int rad_dir_list_recursive (const char* basepath, const char* filepath, SimpleSe
 char* rad_basename_dirname (const char* path);
 bool rad_line_in_file (const char* line, const char* filename);
 
+void rad_replace (char* str, char old, char new);
+
 #endif

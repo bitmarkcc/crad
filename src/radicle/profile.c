@@ -186,7 +186,7 @@ Pubkey profile_get_pubkey_from_privkey() {
     return pubkey;
 }
 
-int profile_get_privkey (ssh_key* key) {
+int profile_get_privkey (ssh_key* key, char* passphrase) {
     char* rad_home = get_rad_home();
     if (!rad_home) {
 	fprintf(stderr,"Can't get Radicle home directory\n");
@@ -202,12 +202,29 @@ int profile_get_privkey (ssh_key* key) {
     char* privkeyfile = malloc(strlen(keydir)+9);
     strcpy(privkeyfile,keydir);
     strcat(privkeyfile,"/radicle");
-    char* passphrase = profile_get_password(rad_home);
+    if (passphrase) {
+	char* pw_fname = malloc(strlen(rad_home)+13);
+	sprintf(pw_fname,"%s/.pw/radicle",rad_home);
+	if (!password_loaded()) {
+	    FILE* f = fopen(pw_fname,"w");
+	    if (!f) {
+		fprintf(stderr,"Can't open password file for writing\n");
+		return 0;
+	    }
+	    if (fputs(passphrase,f)==EOF) {
+		fprintf(stderr,"Failed to put password in password file\n");
+		return 0;
+	    }
+	}
+    }
+    else {
+	passphrase = profile_get_password(rad_home);
+    }
     if (ssh_pki_import_privkey_file(privkeyfile,passphrase,0,0,key) != SSH_OK) {
 	fprintf(stderr,"Failed to import privkey file (check passphrase)\n");
 	return 1;
     }
-    memset(passphrase,0,RAD_BUFSIZ);
+    if (passphrase) memset(passphrase,0,strlen(passphrase));
     return 0;
 }
 
@@ -496,7 +513,7 @@ bool password_loaded() {
 
 int load_cleartext_privkey_file (const char* rad_home) {
     ssh_key key = 0;
-    if (profile_get_privkey(&key)) {
+    if (profile_get_privkey(&key,0)) {
 	eprintf("failed to get privkey");
 	return 1;
     }
@@ -520,4 +537,21 @@ int unload_cleartext_privkey_file (const char* rad_home) {
 	eprintf("failed to delete cleartext private key");
 	return 1;
     }
+}
+
+int unload_password () {
+    char* rad_home = get_rad_home();
+    if (rad_home) {
+	char* pw_fname = malloc(strlen(rad_home)+13);
+	sprintf(pw_fname,"%s/.pw/radicle",rad_home);
+	if (access(pw_fname,F_OK)) {
+	    eprintf("password already unloaded");
+	    return 1;
+	}
+	if (remove(pw_fname)) {
+	    eprintf("failed to delete password file");
+	    return 1;
+	}
+    }
+    return 0;
 }

@@ -14,7 +14,7 @@
 int key_sign_openssh (char** out_raw, char** out_full, const Pubkey signer, const uint8_t* inp, size_t len) {
     char* sig = 0;
     ssh_key privkey = 0;
-    if (profile_get_privkey(&privkey)) {
+    if (profile_get_privkey(&privkey,0)) {
 	return 1;
     }
     uint8_t* privkey_raw = 0;
@@ -45,7 +45,7 @@ int key_sign_bytes (uint8_t out [64], const Pubkey signer, const uint8_t* inp, s
     uint8_t* sig = malloc(64);
     size_t siglen = 64;
     ssh_key privkey = 0;
-    if (profile_get_privkey(&privkey)) {
+    if (profile_get_privkey(&privkey,0)) {
 	return 1;
     }
     uint8_t* privkey_raw = 0;
@@ -71,7 +71,7 @@ int key_sign_base58 (char** out, const Pubkey signer, const uint8_t* inp, size_t
     uint8_t* sig = malloc(64);
     size_t siglen = 64;
     ssh_key privkey = 0;
-    if (profile_get_privkey(&privkey)) {
+    if (profile_get_privkey(&privkey,0)) {
 	return 1;
     }
     uint8_t* privkey_raw = 0;

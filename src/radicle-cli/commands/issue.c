@@ -683,7 +683,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 
     do {
 	if (!passed_entry_in_cob_db) {
-	    iprintf("entry %s going to apply list",git_oid_tostr(buf,HEXSIZ,&entry));
+	    //iprintf("entry %s going to apply list",git_oid_tostr(buf,HEXSIZ,&entry));
 	    if (n_entries_to_apply>=entries_to_apply_capacity) {
 		entries_to_apply_capacity *= 2;
 		entries_to_apply = realloc(entries_to_apply,entries_to_apply_capacity*sizeof(Oid));

@@ -100,7 +100,7 @@ int node_run () {
     iprintf("Version %s %s (commit %s, timestamp %s)",VERSION.name,VERSION.version,VERSION.commit,VERSION.timestamp);
     iprintf("Loading private key");
     ssh_key key = 0;
-    if (profile_get_privkey(&key)) {
+    if (profile_get_privkey(&key,0)) {
 	eprintf("Unable to load private key");
 	return 1;
     }

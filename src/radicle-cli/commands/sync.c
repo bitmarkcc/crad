@@ -62,7 +62,7 @@ int sync_run (Command c) {
     if (git_repository_open(&repo,cwd)) {
 	eprintf("failed to open git repository at %s",cwd);
 	return 1;
-	}
+    }
     rid = rid_of_rad_remote(repo);
     if (git_oid_is_zero(&rid)) {
 	eprintf("failed to get rid from CWD");

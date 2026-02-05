@@ -480,3 +480,12 @@ bool rad_line_in_file (const char* line, const char* filename) {
     fclose(f);
     return ret;
 }
+
+void rad_replace (char* str, char old, char new) {
+    char* it = str;
+    while (*it) {
+	if (*it == old)
+	    *it = new;
+	it++;
+    }
+}

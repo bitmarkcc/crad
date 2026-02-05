@@ -219,7 +219,7 @@ int clone_run (Command c) {
 	    return 1;
 	}
     }
-    else { // use _rad_
+    else { // use _rad_ , todo: set correct alias and did in config for rad repo
 	iprintf("cloning using rad");
 	char* argv [5];
 	argv[0] = "rad";

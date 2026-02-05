@@ -7,6 +7,8 @@ typedef struct {
     char err;
     bool did;
     bool home;
+    bool authed;
+    bool alias;
 } SelfCommand;
 
 int self_run (Command c);

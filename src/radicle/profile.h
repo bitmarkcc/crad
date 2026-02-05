@@ -22,7 +22,7 @@ Pubkey profile_get_pubkey ();
 
 Pubkey profile_get_pubkey_from_privkey ();
 
-int profile_get_privkey (ssh_key* key);
+int profile_get_privkey (ssh_key* key, char* passphrase);
 
 Storage profile_get_storage ();
 
@@ -32,5 +32,7 @@ char* profile_get_password (const char* rad_home);
 
 int load_cleartext_privkey_file (const char* rad_home);
 int unload_cleartext_privkey_file (const char* rad_home);
+int unload_password();
+char* profile_get_alias (const char* rad_home);
 
 #endif

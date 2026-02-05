@@ -92,3 +92,15 @@ DocumentEncoding document_sign (Document doc, Pubkey signer) {
     key_sign_base58(&encoding.sig,signer,encoding.oid.id,20);
     return encoding;
 }
+
+char* visibility_to_str (Visibility visibility) {
+    switch (visibility) {
+    case VIS_PUBLIC:
+	return "public";
+    case VIS_PRIVATE:
+	return "private";
+    default:
+	return "public";
+    }
+    return "public";
+}

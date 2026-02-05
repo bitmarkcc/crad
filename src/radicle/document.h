@@ -38,4 +38,6 @@ DocumentEncoding document_encode (Document doc);
 
 DocumentEncoding document_sign (Document doc, Pubkey signer);
 
+char* visibility_to_str (Visibility visibility);
+
 #endif

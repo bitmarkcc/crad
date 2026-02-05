@@ -11,12 +11,14 @@ SelfCommand command_self_default () {
     cmd.err = 0;
     cmd.did = false;
     cmd.home = false;
+    cmd.authed = false;
+    cmd.alias = false;
     return cmd;
 }
 
 void print_help_self () {
     printf("crad self (Show information about your identity and device) Usage:\n");
-    printf("crad self [--did] [--home]\n");
+    printf("crad self [--did] [--home] [--authed]\n");
 }
 
 SelfCommand parse_args_self (int argc, char** argv) {
@@ -27,6 +29,12 @@ SelfCommand parse_args_self (int argc, char** argv) {
 	}
 	else if (!strcmp(argv[i],"--home")) {
 	    cmd.home = true;
+	}
+	else if (!strcmp(argv[i],"--authed")) {
+	    cmd.authed = true;
+	}
+	else if (!strcmp(argv[i],"--alias")) {
+	    cmd.alias = true;
 	}
     }
     return cmd;
@@ -66,6 +74,30 @@ int self_run (Command c) {
 		return 1;
 	    }
 	    printf("%s\n",rad_home);
+	}
+	else if (cmd.authed) {
+	    if (password_loaded()) {
+		printf("yes\n");
+		return 0;
+	    }
+	    else {
+		printf("no\n");
+		return 1;
+	    }
+	}
+	else if (cmd.alias) {
+	    const char* rad_home = get_rad_home();
+	    if (!rad_home) {
+		eprintf("failed to get rad home");
+		return 1;
+	    }
+	    const char* alias = profile_get_alias(rad_home);
+	    if (!alias) {
+		eprintf("failed to get alias");
+		return 1;
+	    }
+	    printf("%s\n",alias);
+	    return 0;
 	}
     }
     return 0;
