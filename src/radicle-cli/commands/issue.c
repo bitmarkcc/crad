@@ -29,21 +29,23 @@ IssueCommand command_issue_default() {
     IssueState state = {0};
     cmd.state = state;
     set_init(&cmd.assigned);
+    cmd.rid = 0;
+    cmd.json = false;
     return cmd;
 }
 
 void print_help_issue () {
     printf("crad issue (Manage issues) Usage:\n");
-    printf("crad issue open [--title <title>] [--desc <text>]\n");
-    printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>] [--edit <comment-id>]\n");
+    printf("crad issue open [--title <title>] [--desc <text>] [-R <rid>]\n");
+    printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>] [--edit <comment-id>] [-R <rid>]\n");
     printf("crad issue assign <issue-id> [--add <did>] [--delete <did>]\n");
     printf("crad issue label <issue-id> [--add <label>] [--delete <label>]\n");
     printf("crad issue react <issue-id> [--emoji <char>] [--to <comment>]\n");
     printf("crad issue state <issue-id> [--closed --open --solved]\n");
     printf("crad issue delete <issue-id>\n");
     printf("crad issue edit <issue-id> [--title <title>] [--desc <text>]\n");
-    printf("crad issue list [--assigned <did>] [--closed | --open | --solved]\n");
-    printf("crad issue show <issue-id>\n");
+    printf("crad issue list [--assigned <did>] [--closed | --open | --solved] [-R <rid>]\n");
+    printf("crad issue show <issue-id> [-R <rid>] [--json]\n");
 }
 
 IssueCommand parse_args_issue (int argc, char** argv) {
@@ -129,6 +131,17 @@ IssueCommand parse_args_issue (int argc, char** argv) {
 	    }
 	    set_add_str(&cmd.assigned,argv[i+1]);
 	}
+	else if (!strcmp(argv[i],"-R")) {
+	    if (i+1 >= argc) {
+		eprintf("no parameter to -R");
+		cmd.err = 1;
+		return cmd;
+	    }
+	    cmd.rid = strdup(argv[i+1]);
+	}
+	else if (!strcmp(argv[i],"--json")) {
+	    cmd.json = true;
+	}
     }
     return cmd;
 }
@@ -151,7 +164,7 @@ int issue_run (Command c) {
 	if (cmd.err) {
 	    return 1;
 	}
-	return issue_open(cmd.title,cmd.desc);
+	return issue_open(cmd.title,cmd.desc,cmd.rid);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"comment")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -164,7 +177,7 @@ int issue_run (Command c) {
 	    return 1;
 	}
 	size_t issue_id_hexlen = strlen(c.argv[1]);
-	return issue_comment(issue_id,issue_id_hexlen,cmd.reply_to,cmd.reply_to_hexlen,cmd.message,cmd.edit,cmd.edit_hexlen);
+	return issue_comment(issue_id,issue_id_hexlen,cmd.reply_to,cmd.reply_to_hexlen,cmd.message,cmd.edit,cmd.edit_hexlen,cmd.rid);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"assign")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -233,7 +246,7 @@ int issue_run (Command c) {
     else if (c.argc > 0 && !strcmp(c.argv[0],"list")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
 	if (cmd.err) return 1;
-	return issue_list(&cmd.assigned,cmd.state);
+	return issue_list(&cmd.assigned,cmd.state,cmd.rid);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"show")) {
 	Oid issue_id = {{0}};
@@ -242,7 +255,9 @@ int issue_run (Command c) {
 	    return 1;
 	}
 	size_t issue_id_hexlen = strlen(c.argv[1]);
-	return issue_show(issue_id,issue_id_hexlen);
+	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
+	if (cmd.err) return 1;
+	return issue_show(issue_id,issue_id_hexlen,cmd.rid,cmd.json);
     }
     else if (c.argc > 0) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -394,7 +409,7 @@ int get_labels_from_cob_db (SimpleSet* labels, Oid issue_id) {
     return 0;
 }
 
-int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, uint64_t commit_time, const char* author, const char* status) {
+int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, uint64_t commit_time, const char* author, const char* alias, const char* status) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
     const char* db_file = get_cob_cache_file();
@@ -403,7 +418,7 @@ int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, uint64_t commit_time, const
 	eprintf("failed to open cob db");
 	return 1;
     }
-    const char* sql = "INSERT INTO Issues (ID, RID, EntryID, EditID, Time, Author, Status) VALUES (?, ?, ?, ?, ?, ?, ?);";
+    const char* sql = "INSERT INTO Issues (ID, RID, EntryID, EditID, Time, Author, Alias, Status) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
     if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
 	eprintf("failed to prepare sql statement");
 	return 1;
@@ -414,7 +429,8 @@ int add_issue_to_cob_db (Oid issue_id, Oid repo_oid, uint64_t commit_time, const
     sqlite3_bind_blob(stmt,4,issue_id.id,20,SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt,5,commit_time);
     sqlite3_bind_text(stmt,6,author,-1,SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt,7,status,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,7,alias,-1,SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt,8,status,-1,SQLITE_TRANSIENT);
     if (sqlite3_step(stmt) != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
@@ -725,7 +741,9 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 	    const git_signature* git_author = git_commit_author(commit);
 	    char author [128];
 	    sprintf(author,"did:key:%s",rad_email_get_domain(git_author->email));
-	    if (add_issue_to_cob_db(entry_id,rrepo.rid,git_commit_time(commit),author,"open")) {
+	    char alias [RAD_BUFSIZ];
+	    sprintf(alias,"%s",rad_email_get_user(git_author->email));
+	    if (add_issue_to_cob_db(entry_id,rrepo.rid,git_commit_time(commit),author,alias,"open")) {
 		eprintf("failed to add issue to cob db");
 		return 1;
 	    }
@@ -1157,6 +1175,37 @@ char* get_issue_author (RadRepo rrepo, Oid issue_id) {
     return author;
 }
 
+char* get_issue_alias (RadRepo rrepo, Oid issue_id) {
+    sqlite3* db = 0;
+    sqlite3_stmt* stmt = 0;
+    const char* db_file = get_cob_cache_file();
+    sqlite3_open(db_file,&db);
+    if (!db) {
+	eprintf("failed to open cob db");
+	return 0;
+    }
+    const char* sql = "SELECT Alias FROM Issues WHERE ID = ?;";
+    if (sqlite3_prepare_v2(db,sql,-1,&stmt,0)) {
+	eprintf("failed to prepare sql statement");
+	return 0;
+    }
+    sqlite3_bind_blob(stmt,1,issue_id.id,20,SQLITE_TRANSIENT);
+    int ret = 0;
+    char* alias = 0;
+    while (1) {
+	ret = sqlite3_step(stmt);
+	if (ret == SQLITE_ROW) alias = strdup(sqlite3_column_text(stmt,0));
+	else break;
+    }
+    if (ret != SQLITE_DONE) {
+	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
+	return 0;
+    }
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return alias;
+}
+
 int get_issue_labels (SimpleSet* labels, Oid issue_id) {
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
@@ -1268,14 +1317,27 @@ IssueState get_issue_state (Oid issue_id) {
     return state;
 }
 
-int issue_open (char* title, char* desc) {
+int issue_open (char* title, char* desc, const char* rid) {
     char buf [HEXSIZ];
+    const char* rad_home = get_rad_home();
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
+
     Pubkey signer = profile_get_pubkey();    
     RepoEntry re = cob_issue_init(rrepo,signer,title,desc);
     if (git_oid_is_zero(&re.oid)) {
@@ -1288,7 +1350,8 @@ int issue_open (char* title, char* desc) {
 	return 1;
     }
     git_time_t commit_time = git_commit_time(commit);
-    if (add_issue_to_cob_db(re.oid,rrepo.rid,commit_time,pubkey_to_did(signer.bytes),"open")) {
+    const char* alias = profile_get_alias(rad_home);
+    if (add_issue_to_cob_db(re.oid,rrepo.rid,commit_time,pubkey_to_did(signer.bytes),alias,"open")) {
 	eprintf("failed to add issue to cob db");
 	return 1;
     }
@@ -1296,12 +1359,24 @@ int issue_open (char* title, char* desc) {
     return 0;
 }
 
-int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char* message, Oid edit, size_t edit_hexlen) {
+int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t reply_to_hexlen, char* message, Oid edit, size_t edit_hexlen, const char* rid) {
     char buf [HEXSIZ];
     Oid zero = {{0}};
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	const char* rad_home = get_rad_home();
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
@@ -1643,11 +1718,23 @@ int issue_edit (Oid issue_id, size_t issue_id_hexlen, char* title, char* desc) {
     return 0;
 }
 
-int issue_list (SimpleSet* assigned, IssueState state) {
+int issue_list (SimpleSet* assigned, IssueState state, const char* rid) {
     char buf [HEXSIZ];
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	const char* rad_home = get_rad_home();
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
@@ -1661,7 +1748,7 @@ int issue_list (SimpleSet* assigned, IssueState state) {
     size_t n_issues = 0;
     char** issues_list = set_to_array(&issues,&n_issues);
     if (n_issues)
-	printf("ID------Title------------Author------------Labels------------Assignees------------Opened\n");
+	printf("ID------Title------------Author------------Alias------------Labels------------Assignees------------Opened\n");
     for (int i=0; i<n_issues; i++) {
 	Oid issue_entry = {{0}};
 	if (git_oid_fromstr(&issue_entry,issues_list[i])) {
@@ -1734,20 +1821,32 @@ int issue_list (SimpleSet* assigned, IssueState state) {
 	}
 	if (strlen(title)>16)
 	    title[16] = 0;
+	rad_replace(title,' ','_');
 	printf("%s",title);
 	size_t title_len = strlen(title);
 	for (size_t j=0; j<17-title_len; j++)
 	    printf(" ");
-	char* author = get_issue_author(rrepo,issue_id);
+	char* author = get_issue_author(rrepo,issue_id)+8;
 	if (!author) {
 	    eprintf("failed to get author for issue");
 	    return 1;
 	}
-	if (strlen(author)>17)
-	    author[17] = 0;
+	if (strlen(author)>12)
+	    author[12] = 0;
 	printf("%s",author);
 	size_t author_len = strlen(author);
-	for (size_t j=0; j<18-author_len; j++)
+	for (size_t j=0; j<13-author_len; j++)
+	    printf(" ");
+	char* alias = get_issue_alias(rrepo,issue_id);
+	if (!alias) {
+	    eprintf("failed to get alias for issue");
+	    return 1;
+	}
+	if (strlen(alias)>12)
+	    alias[12] = 0;
+	printf("%s",alias);
+	size_t alias_len = strlen(alias);
+	for (size_t j=0; j<13-alias_len; j++)
 	    printf(" ");
 	SimpleSet labels;
 	set_init(&labels);
@@ -1757,8 +1856,9 @@ int issue_list (SimpleSet* assigned, IssueState state) {
 	}
 	size_t n_labels = 0;
 	char** labels_list = set_to_array(&labels,&n_labels);
-	char* labels_str = malloc(n_labels*256); //todo set correct size
+	char* labels_str = malloc(n_labels*256+2); //todo set correct size
 	strcpy(labels_str,"");
+	if (!n_labels) strcpy(labels_str,"_");
 	for (size_t j=0; j<n_labels; j++) {
 	    strcat(labels_str,labels_list[j]);
 	    if (j<n_labels-1)
@@ -1773,8 +1873,9 @@ int issue_list (SimpleSet* assigned, IssueState state) {
 	
 	size_t n_assignees = 0;
 	char** assignees_list = set_to_array(&assignees,&n_assignees);
-	char* assignees_str = malloc(n_assignees*128); //todo set correct size
+	char* assignees_str = malloc(n_assignees*128+2); //todo set correct size
 	strcpy(assignees_str,"");
+	if (!n_assignees) strcpy(assignees_str,"_");
 	for (size_t j=0; j<n_assignees; j++) {
 	    strcat(assignees_str,assignees_list[i]);
 	    if (j<n_assignees-1)
@@ -1792,15 +1893,30 @@ int issue_list (SimpleSet* assigned, IssueState state) {
 	    return 1;
 	}
 	time_t time_opened_tt = time_opened;
-	printf("%s",ctime(&time_opened_tt));
+	char* time_opened_str = ctime(&time_opened_tt);
+	rad_replace(time_opened_str,' ','_');
+	printf("%s",time_opened_str);
     }
+    return 0;
 }
 
-int issue_show (Oid issue_id, size_t issue_id_hexlen) {
+int issue_show (Oid issue_id, size_t issue_id_hexlen, const char* rid, bool json) {
     char buf [HEXSIZ];
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	const char* rad_home = get_rad_home();
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
@@ -1816,15 +1932,48 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen) {
     }
     issue_id = *git_odb_object_id(odb_obj);
 
-    printf("Title   %s\n",get_issue_title(rrepo,issue_id));
-    printf("Issue   %s\n",git_oid_tostr(buf,HEXSIZ,&issue_id));
-    printf("Author  %s\n",get_issue_author(rrepo,issue_id));
-    IssueState state = get_issue_state(issue_id);
-    printf("Status  %s",state.status);
-    if (state.reason && strlen(state.reason))
-	printf(" (%s)",state.reason);
-    printf("\n\n");
-    printf("%s\n\n",get_issue_description(rrepo,issue_id));
+    json_object* obj = 0;
+    json_object* comments_arr = 0;
+    
+    if (json) {
+	const char* issue_author = get_issue_author(rrepo,issue_id);
+	const char* issue_alias = get_issue_alias(rrepo,issue_id);
+	const char* issue_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&issue_id));
+	IssueState state = get_issue_state(issue_id);
+	int64_t time_opened = get_issue_opening_time(rrepo,issue_id);
+	
+	obj = json_object_new_object();
+	comments_arr = json_object_new_array();
+	json_object_object_add(obj,"title",json_object_new_string(get_issue_title(rrepo,issue_id)));
+	json_object* state_obj = json_object_new_object();
+	if (state.status) {
+	    json_object_object_add(state_obj,"status",json_object_new_string(state.status));
+	}
+	if (state.reason) {
+	    json_object_object_add(state_obj,"reason",json_object_new_string(state.reason));
+	}
+	json_object_object_add(obj,"state",state_obj);
+	
+ 	json_object* comment_obj = json_object_new_object(); // first comment is the description of the issue
+	json_object_object_add(comment_obj,"id",json_object_new_string(issue_id_str));
+	json_object_object_add(comment_obj,"author",json_object_new_string(issue_author));
+	json_object_object_add(comment_obj,"alias",json_object_new_string(issue_alias));
+	json_object_object_add(comment_obj,"time",json_object_new_int(time_opened));
+	json_object_object_add(comment_obj,"replyTo",json_object_new_string(issue_id_str));
+	json_object_object_add(comment_obj,"body",json_object_new_string(get_issue_description(rrepo,issue_id)));
+	json_object_array_add(comments_arr,comment_obj);
+    }
+    else {
+	printf("Title   %s\n",get_issue_title(rrepo,issue_id));
+	printf("Issue   %s\n",git_oid_tostr(buf,HEXSIZ,&issue_id));
+	printf("Author  %s %s\n",get_issue_alias(rrepo,issue_id),get_issue_author(rrepo,issue_id));
+	IssueState state = get_issue_state(issue_id);
+	printf("Status  %s",state.status);
+	if (state.reason && strlen(state.reason))
+	    printf(" (%s)",state.reason);
+	printf("\n\n");
+	printf("%s\n\n",get_issue_description(rrepo,issue_id));
+    }
     
     sqlite3* db = 0;
     sqlite3_stmt* stmt = 0;
@@ -1848,25 +1997,37 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen) {
 	    memcpy(comment_id.id,sqlite3_column_blob(stmt,0),20);
 	    Oid edit_id = {{0}};
 	    memcpy(edit_id.id,sqlite3_column_blob(stmt,1),20);
-	    time_t comment_time = sqlite3_column_int64(stmt,2);
+	    int64_t comment_time = sqlite3_column_int64(stmt,2);
 	    Oid reply_to = {{0}};
 	    memcpy(reply_to.id,sqlite3_column_blob(stmt,3),20);
 	    char* author = strdup((char*)sqlite3_column_text(stmt,4));
-	    author[17] = 0;
 	    const char* alias = strdup((char*)sqlite3_column_text(stmt,5));
-	    char* time_hr = strdup(ctime(&comment_time));
-	    time_hr[strlen(time_hr)-1] = 0;
-	    char comment_id_show [8];
-	    memcpy(comment_id_show,git_oid_tostr(buf,HEXSIZ,&comment_id),7);
-	    comment_id_show[7] = 0;
-	    char* reply_to_show = "";
-	    if (!git_oid_is_zero(&reply_to)) {
-		reply_to_show = malloc(17);
-		strcpy(reply_to_show,"reply-to ");
-		memcpy(reply_to_show+9,git_oid_tostr(buf,HEXSIZ,&reply_to),7);
-		reply_to_show[16] = 0;
+	    json_object* comment_obj = 0;
+	    if (json) {
+		comment_obj = json_object_new_object();
+		json_object_object_add(comment_obj,"id",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&comment_id)));
+		json_object_object_add(comment_obj,"author",json_object_new_string(author));
+		json_object_object_add(comment_obj,"alias",json_object_new_string(alias));
+		json_object_object_add(comment_obj,"time",json_object_new_int(comment_time));
+		json_object_object_add(comment_obj,"replyTo",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&reply_to)));
 	    }
-	    printf("%s %s %s %s %s\n",alias,author+8,time_hr,comment_id_show,reply_to_show);
+	    else {
+		author[17] = 0;
+		time_t comment_time_tt = comment_time;
+		char* time_hr = strdup(ctime(&comment_time_tt));
+		time_hr[strlen(time_hr)-1] = 0;
+		char comment_id_show [8];
+		memcpy(comment_id_show,git_oid_tostr(buf,HEXSIZ,&comment_id),7);
+		comment_id_show[7] = 0;
+		char* reply_to_show = "";
+		if (!git_oid_is_zero(&reply_to)) {
+		    reply_to_show = malloc(17);
+		    strcpy(reply_to_show,"reply-to ");
+		    memcpy(reply_to_show+9,git_oid_tostr(buf,HEXSIZ,&reply_to),7);
+		    reply_to_show[16] = 0;
+		}
+		printf("%s %s %s %s %s\n",alias,author+8,time_hr,comment_id_show,reply_to_show);
+	    }
 
 	    git_commit* commit = 0;
 	    if (git_commit_lookup(&commit,rrepo.repo,&edit_id)) {
@@ -1898,13 +2059,23 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen) {
 	    json_object* val_body = 0;
 	    json_object_object_get_ex(content_0,"body",&val_body);
 	    const char* body = json_object_get_string(val_body);
-	    printf("%s\n\n",body);
+	    if (json) {
+		json_object_object_add(comment_obj,"body",json_object_new_string(body));
+		json_object_array_add(comments_arr,comment_obj);
+	    }
+	    else {
+		printf("%s\n\n",body);
+	    }
 	}
 	else break;
     }
     if (ret != SQLITE_DONE) {
 	eprintf("SQL execution failed: %s",sqlite3_errmsg(db));
 	return 1;
+    }
+    if (json) {
+	json_object_object_add(obj,"comments",comments_arr);
+	printf("%s\n",json_object_to_json_string(obj));
     }
     return 0;
 }
