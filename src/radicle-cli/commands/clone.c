@@ -206,6 +206,15 @@ int clone_run (Command c) {
 	    eprintf("failed to set upstream");
 	    return 1;
 	}
+	
+	Storage storage = profile_get_storage();
+	git_config* config = 0;
+	if (git_repository_config(&config,rrepo.repo)) {
+	    fprintf(stderr,"failed to get the config file for the git repository at %s\n",rrepo_path);
+	    return 1;
+	}
+	git_config_set_string(config,"user.name",storage.info.name);
+	git_config_set_string(config,"user.email",storage.info.email);
 
 	// pull from radrepo
 	argv[0] = "git";
