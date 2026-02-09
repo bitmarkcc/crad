@@ -134,8 +134,8 @@ int node_run () {
 	eprintf("sshd command failed");
 	return 1;
     }
-
-    iprintf("Node successfully executed");
+    
+    iprintf("Cradicle Node successfully executed");
     
     return 0;
 }

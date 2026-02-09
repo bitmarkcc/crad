@@ -1,0 +1,11 @@
+#!/bin/bash
+
+ridfull="$1"
+rid="${ridfull:4}"
+dir="$2"
+
+mkdir -p "$dir"
+
+rad_home="`crad self --node-home`"
+
+exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --bind $dir /tmp/$dir --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" rad clone $@

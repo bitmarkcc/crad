@@ -9,6 +9,7 @@ typedef struct {
     bool home;
     bool authed;
     bool alias;
+    bool node_home;
 } SelfCommand;
 
 int self_run (Command c);

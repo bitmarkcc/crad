@@ -13,12 +13,13 @@ SelfCommand command_self_default () {
     cmd.home = false;
     cmd.authed = false;
     cmd.alias = false;
+    cmd.node_home = false;
     return cmd;
 }
 
 void print_help_self () {
     printf("crad self (Show information about your identity and device) Usage:\n");
-    printf("crad self [--did] [--home] [--authed]\n");
+    printf("crad self [--did] [--home] [--authed] [--alias] [--node-home]\n");
 }
 
 SelfCommand parse_args_self (int argc, char** argv) {
@@ -35,6 +36,9 @@ SelfCommand parse_args_self (int argc, char** argv) {
 	}
 	else if (!strcmp(argv[i],"--alias")) {
 	    cmd.alias = true;
+	}
+	else if (!strcmp(argv[i],"--node-home")) {
+	    cmd.node_home = true;
 	}
     }
     return cmd;
@@ -98,6 +102,14 @@ int self_run (Command c) {
 	    }
 	    printf("%s\n",alias);
 	    return 0;
+	}
+	else if (cmd.node_home) {
+	    const char* node_home = get_rad_node_home();
+	    if (!node_home) {
+		eprintf("failed to get rad node home");
+		return 1;
+	    }
+	    printf("%s\n",node_home);
 	}
     }
     return 0;

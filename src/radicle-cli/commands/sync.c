@@ -291,11 +291,10 @@ int sync_run (Command c) {
     }
     else { // use rad
 	char* argv [3];
-	argv[0] = "rad";
-	argv[1] = "sync";
-	argv[2] = 0;
-	if (exec_command("rad",argv)) {
-	    eprintf("rad sync command failed");
+	argv[0] = "rad-sync-wrapped";
+	argv[1] = 0;
+	if (exec_command("rad-sync-wrapped",argv)) {
+	    eprintf("rad sync (wrapped) command failed");
 	    return 1;
 	}
 	

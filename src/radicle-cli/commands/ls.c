@@ -116,6 +116,9 @@ int ls_run (Command c) {
 		for (size_t j=0; j<17-name_len; j++)
 		    printf(" ");
 		printf("%s ",dir->d_name);
+		size_t rid_len = strlen(dir->d_name);
+		for (size_t j=0; j<29-rid_len; j++)
+		    printf(" ");
 		
 		char* visibility_str = visibility_to_str(visibility);
 		if (strlen(visibility_str)>10)

@@ -220,31 +220,30 @@ int clone_run (Command c) {
 	}
     }
     else { // use _rad_ , todo: set correct alias and did in config for rad repo
-	iprintf("cloning using rad");
+	iprintf("cloning using rad-clone-wrapped");
 	char* argv [5];
-	argv[0] = "rad";
-	argv[1] = "clone";
+	argv[0] = "rad-clone-wrapped";
 	rid_str = strdup(c.argv[0]);
-	argv[2] = rid_str; // must be in format rad:zyx...cba
+	argv[1] = rid_str; // must be in format rad:zyx...cba
 	if (c.argc > 1) {
-	    argv[3] = strdup(c.argv[1]);
+	    argv[2] = strdup(c.argv[1]);
 	}
 	else {
-	    argv[3] = strdup(rid_str+4);
+	    argv[2] = strdup(rid_str+4);
 	}
-	argv[4] = 0;
-	if (exec_command("rad",argv)) {
-	    eprintf("rad clone command failed");
+	argv[3] = 0;
+	if (exec_command("rad-clone-wrapped",argv)) {
+	    eprintf("rad clone (wrapped) command failed");
 	    return 1;
 	}
-	clone_dir = argv[3];
+	clone_dir = argv[2];
 	
 	const char* rad_home = get_rad_node_home();
 	const char* crad_home = get_rad_home();
 	char* rad_repo_path = malloc(strlen(rad_home)+128);
 	char* crad_repo_path = malloc(strlen(crad_home)+128);
-	sprintf(rad_repo_path,"%s/storage/%s",rad_home,argv[2]+4);
-	sprintf(crad_repo_path,"%s/storage/%s",crad_home,argv[2]+4);
+	sprintf(rad_repo_path,"%s/storage/%s",rad_home,rid_str+4);
+	sprintf(crad_repo_path,"%s/storage/%s",crad_home,rid_str+4);
 	
 	argv[0] = "cp";
 	argv[1] = "-a";
@@ -256,6 +255,21 @@ int clone_run (Command c) {
 	    return 1;
 	}
 
+	rad_git_init();
+	Storage storage = profile_get_storage();
+	git_repository* repo = 0;
+	if (git_repository_open(&repo,crad_repo_path)) {
+	    eprintf("failed to open git repository at %s",crad_repo_path);
+	    return 1;
+	}
+	git_config* config = 0;
+	if (git_repository_config(&config,repo)) {
+	    fprintf(stderr,"failed to get the config file for the git repository at %s\n",crad_repo_path);
+	    return 1;
+	}
+	git_config_set_string(config,"user.name",storage.info.name);
+	git_config_set_string(config,"user.email",storage.info.email);
+	
 	if (!getcwd(cwd,sizeof(cwd))) {
 	    fprintf(stderr,"Can't get current working directory\n");
 	    return 1;

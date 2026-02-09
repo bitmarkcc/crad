@@ -1748,7 +1748,7 @@ int issue_list (SimpleSet* assigned, IssueState state, const char* rid) {
     size_t n_issues = 0;
     char** issues_list = set_to_array(&issues,&n_issues);
     if (n_issues)
-	printf("ID------Title------------Author------------Alias------------Labels------------Assignees------------Opened\n");
+	printf("ID------Title------------Author-------Alias--------Labels------------Assignees------------Opened\n");
     for (int i=0; i<n_issues; i++) {
 	Oid issue_entry = {{0}};
 	if (git_oid_fromstr(&issue_entry,issues_list[i])) {
