@@ -120,6 +120,8 @@ int node_run () {
     sprintf(line,"PidFile %s/.ssh/sshd.pid\n",rad_home);
     fputs("PasswordAuthentication no\n",f_sshd);
     fputs("PubkeyAuthentication yes\n",f_sshd);
+    //fputs("KexAlgorithms +ecdh-sha2-secp256k1\n",f_sshd);
+    //fputs("HostKeyAlgorithms +ecdsa-sha2-secp256k1\n",f_sshd);
     //fputs("Match User *,!ak\n",f_sshd);
     //fputs("  ForceCommand /bin/bash --login\n",f_sshd);
     fclose(f_sshd);

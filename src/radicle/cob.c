@@ -192,7 +192,7 @@ char** issue_actions_to_json_strings (const IssueAction* actions, size_t n) {
 	else if (action.type == ISSUE_ACTION_COMMENT) { // todo implement embeds
 	    json_object_object_add(obj,"body",json_object_new_string(action.body));
 	    //if (!git_oid_is_zero(action.embeds)) json_object_object_add();
-	    if (!git_oid_is_zero(&action.reply_to)) json_object_object_add(obj,"reply_to",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.reply_to)));
+	    if (!git_oid_is_zero(&action.reply_to)) json_object_object_add(obj,"replyTo",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.reply_to)));
 	    json_object_object_add(obj,"type",json_object_new_string("comment"));
 	} //todo cover all cases for the action.type
 	else if (action.type == ISSUE_ACTION_ASSIGN) {

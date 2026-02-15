@@ -57,3 +57,6 @@ dkms.conf
 src/radicle-cli/rad
 src/radicle-cli/crad
 src/radicle-remote/git-remote-rad
+src/radicle-node/cradicle-node
+
+*~

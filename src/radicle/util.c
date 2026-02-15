@@ -205,7 +205,7 @@ int exec_command (const char* file, char* const argv []) {
 	if (dup2(fd,2)<0) {
 	    fprintf(stderr,"failed to redirect stderr to /dev/null\n");
 	    return 1;
-	}
+	    }
 	return execvp(file,argv);
     default:
 	int status;

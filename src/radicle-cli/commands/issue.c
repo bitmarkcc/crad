@@ -38,8 +38,8 @@ void print_help_issue () {
     printf("crad issue (Manage issues) Usage:\n");
     printf("crad issue open [--title <title>] [--desc <text>] [-R <rid>]\n");
     printf("crad issue comment <issue-id> [--message <message>] [--reply-to <comment-id>] [--edit <comment-id>] [-R <rid>]\n");
-    printf("crad issue assign <issue-id> [--add <did>] [--delete <did>]\n");
-    printf("crad issue label <issue-id> [--add <label>] [--delete <label>]\n");
+    printf("crad issue assign <issue-id> [--add <did>] [--delete <did>] [-R <rid>]\n");
+    printf("crad issue label <issue-id> [--add <label>] [--delete <label>] [-R <rid>]\n");
     printf("crad issue react <issue-id> [--emoji <char>] [--to <comment>]\n");
     printf("crad issue state <issue-id> [--closed --open --solved]\n");
     printf("crad issue delete <issue-id>\n");
@@ -188,7 +188,7 @@ int issue_run (Command c) {
 	    return 1;
 	}
 	size_t issue_id_hexlen = strlen(c.argv[1]);
-	return issue_assign(issue_id,issue_id_hexlen,&cmd.add,&cmd.delete);
+	return issue_assign(issue_id,issue_id_hexlen,&cmd.add,&cmd.delete,cmd.rid);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"label")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -199,7 +199,7 @@ int issue_run (Command c) {
 	    return 1;
 	}
 	size_t issue_id_hexlen = strlen(c.argv[1]);
-	return issue_label(issue_id,issue_id_hexlen,&cmd.add,&cmd.delete);
+	return issue_label(issue_id,issue_id_hexlen,&cmd.add,&cmd.delete,cmd.rid);
     }
     else if (c.argc > 1 && !strcmp(c.argv[0],"react")) {
 	IssueCommand cmd = parse_args_issue(c.argc,c.argv);
@@ -770,7 +770,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 		return 1;
 	    }
 	    const uint8_t* blob_content = git_blob_rawcontent(blob);
-	    //iprintf("blob_content %s",(char*)blob_content);
+	    iprintf("blob_content %s",(char*)blob_content);
 	    json_object* content_0 = json_tokener_parse((char*)blob_content);	    
 	    json_object* val_type = 0;
 	    json_object_object_get_ex(content_0,"type",&val_type);
@@ -778,10 +778,10 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 	    
 	    if (!strcmp(type,"comment")) {
 		json_object* val_reply_to = 0;
-		json_object_object_get_ex(content_0,"reply_to",&val_reply_to);
+		json_object_object_get_ex(content_0,"replyTo",&val_reply_to);
 		Oid reply_to = {{0}};
 		if (git_oid_fromstr(&reply_to,json_object_get_string(val_reply_to))) {
-		    eprintf("failed to convert string to git oid");
+		    eprintf("failed to convert string to git oid: %s",json_object_get_string(val_reply_to));
 		    return 1;
 		}
 		const git_signature* git_author = git_commit_author(commit);
@@ -824,7 +824,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 		json_object_object_get_ex(content_0,"id",&val_reply_to);
 		Oid reply_to = {{0}};
 		if (git_oid_fromstr(&reply_to,json_object_get_string(val_reply_to))) {
-		    eprintf("failed to convert string to git oid");
+		    eprintf("failed to convert string to git oid (reply_to for comment.react)");
 		    return 1;
 		}
 		if (add_reaction_to_cob_db(entry_id,issue_id,reply_to)) {
@@ -860,7 +860,7 @@ int update_issue_in_cob_db (Oid issue_entry, RadRepo rrepo) {
 		json_object_object_get_ex(content_0,"id",&val_edit);
 		Oid edit = {{0}};
 		if (git_oid_fromstr(&edit,json_object_get_string(val_edit))) {
-		    eprintf("failed to convert string to git oid");
+		    eprintf("failed to convert string to git oid (edit id for comment.edit)");
 		    return 1;
 		}
 		if (edit_comment_in_cob_db(edit,entry_id,git_commit_time(commit))) {
@@ -984,58 +984,38 @@ char* get_issue_title (RadRepo rrepo, Oid issue_id) {
 	eprintf("failed to get tree from git commit");
 	return 0;
     }
-    git_tree_entry* tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
-	eprintf("Can't find the git tree entry 0");
-	return 0;
-    }
-    const Oid* poid = git_tree_entry_id(tree_entry);
-    if (!poid) {
-	eprintf("Can't find oid of git tree entry");
-	return 0;
-    }
-    git_blob* blob = 0;
-    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
-	eprintf("can't lookup blob corresponding to git oid");
-	return 0;
-    }
-    const uint8_t* blob_content = git_blob_rawcontent(blob);
-    json_object* content_0 = json_tokener_parse((char*)blob_content);
-    tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"1")) {
-	eprintf("Can't find the git tree entry 1");
-	return 0;
-    }
-    poid = git_tree_entry_id(tree_entry);
-    if (!poid) {
-	eprintf("Can't find oid of git tree entry");
-	return 0;
-    }
-    blob = 0;
-    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
-	eprintf("can't lookup blob corresponding to git oid");
-	return 0;
-    }
-    blob_content = git_blob_rawcontent(blob);
-    json_object* content_1 = json_tokener_parse((char*)blob_content);
-    json_object* val_type = 0;
-    json_object_object_get_ex(content_0,"type",&val_type);
-    const char* type = json_object_get_string(val_type);
     json_object* content = 0;
-    if (!strcmp(type,"edit")) {
-	content = content_0;
-    }
-    else {
-	val_type = 0;
-	json_object_object_get_ex(content_1,"type",&val_type);
-	type = json_object_get_string(val_type);
-	if (!strcmp(type,"edit")) {
-	    content = content_1;
-	}
-	else {
-	    eprintf("can't find edit type");
+    for (size_t i=0; i<16; i++) { // todo set right limit instead of 16
+	char i_str [3];
+	sprintf(i_str,"%lu",i);
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,i_str)) {
+	    eprintf("Can't find the git tree entry %s",i_str);
 	    return 0;
 	}
+	const Oid* poid = git_tree_entry_id(tree_entry);
+	if (!poid) {
+	    eprintf("Can't find oid of git tree entry");
+	    return 0;
+	}
+	git_blob* blob = 0;
+	if (git_blob_lookup(&blob,rrepo.repo,poid)) {
+	    eprintf("can't lookup blob corresponding to git oid");
+	    return 0;
+	}
+	const uint8_t* blob_content = git_blob_rawcontent(blob);
+	json_object* content_cur = json_tokener_parse((char*)blob_content);
+	json_object* val_type = 0;
+	json_object_object_get_ex(content_cur,"type",&val_type);
+	const char* type = json_object_get_string(val_type);
+	if (!strcmp(type,"edit")) {
+	    content = content_cur;
+	    break;
+	}
+    }
+    if (!content) {
+	eprintf("can't find edit type");
+	return 0;
     }
     json_object* val_title = 0;
     json_object_object_get_ex(content,"title",&val_title);
@@ -1083,58 +1063,38 @@ char* get_issue_description (RadRepo rrepo, Oid issue_id) {
 	eprintf("failed to get tree from git commit");
 	return 0;
     }
-    git_tree_entry* tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"0")) {
-	eprintf("Can't find the git tree entry 0");
-	return 0;
-    }
-    const Oid* poid = git_tree_entry_id(tree_entry);
-    if (!poid) {
-	eprintf("Can't find oid of git tree entry");
-	return 0;
-    }
-    git_blob* blob = 0;
-    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
-	eprintf("can't lookup blob corresponding to git oid");
-	return 0;
-    }
-    const uint8_t* blob_content = git_blob_rawcontent(blob);
-    json_object* content_0 = json_tokener_parse((char*)blob_content);
-    tree_entry = 0;
-    if (git_tree_entry_bypath(&tree_entry,tree,"1")) {
-	eprintf("Can't find the git tree entry 1");
-	return 0;
-    }
-    poid = git_tree_entry_id(tree_entry);
-    if (!poid) {
-	eprintf("Can't find oid of git tree entry");
-	return 0;
-    }
-    blob = 0;
-    if (git_blob_lookup(&blob,rrepo.repo,poid)) {
-	eprintf("can't lookup blob corresponding to git oid");
-	return 0;
-    }
-    blob_content = git_blob_rawcontent(blob);
-    json_object* content_1 = json_tokener_parse((char*)blob_content);
-    json_object* val_type = 0;
-    json_object_object_get_ex(content_0,"type",&val_type);
-    const char* type = json_object_get_string(val_type);
     json_object* content = 0;
-    if (!strcmp(type,"comment") || !strcmp(type,"comment.edit")) {
-	content = content_0;
-    }
-    else {
-	val_type = 0;
-	json_object_object_get_ex(content_1,"type",&val_type);
-	type = json_object_get_string(val_type);
-	if (!strcmp(type,"comment") || !strcmp(type,"comment.edit")) {
-	    content = content_1;
-	}
-	else {
-	    eprintf("can't find edit type");
+    for (size_t i=0; i<16; i++) { // todo set right limit instead of 16
+	char i_str [3];
+	sprintf(i_str,"%lu",i);
+	git_tree_entry* tree_entry = 0;
+	if (git_tree_entry_bypath(&tree_entry,tree,i_str)) {
+	    eprintf("Can't find the git tree entry %s",i_str);
 	    return 0;
 	}
+	const Oid* poid = git_tree_entry_id(tree_entry);
+	if (!poid) {
+	    eprintf("Can't find oid of git tree entry");
+	    return 0;
+	}
+	git_blob* blob = 0;
+	if (git_blob_lookup(&blob,rrepo.repo,poid)) {
+	    eprintf("can't lookup blob corresponding to git oid");
+	    return 0;
+	}
+	const uint8_t* blob_content = git_blob_rawcontent(blob);
+	json_object* content_cur = json_tokener_parse((char*)blob_content);
+	json_object* val_type = 0;
+	json_object_object_get_ex(content_cur,"type",&val_type);
+	const char* type = json_object_get_string(val_type);
+	if (!strcmp(type,"comment") || !strcmp(type,"comment.edit")) {
+	    content = content_cur;
+	    break;
+	}
+    }
+    if (!content) {
+	eprintf("can't find comment type");
+	return 0;
     }
     json_object* val_desc = 0;
     json_object_object_get_ex(content,"body",&val_desc);
@@ -1448,11 +1408,23 @@ int issue_comment (Oid issue_id, size_t issue_id_hexlen, Oid reply_to, size_t re
     return 0;
 }
 
-int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete) {
+int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete, const char* rid) {
     char buf [HEXSIZ];
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	const char* rad_home = get_rad_home();
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
@@ -1506,11 +1478,23 @@ int issue_assign (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSe
     return 0;    
 }
 
-int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete) {
+int issue_label (Oid issue_id, size_t issue_id_hexlen, SimpleSet* add, SimpleSet* delete, const char* rid) {
     char buf [HEXSIZ];
     rad_git_init();
     RadRepo rrepo = rad_repo_default();
-    if (get_rad_repo_from_cwd(&rrepo)) {
+    if (rid) {
+	const char* rad_home = get_rad_home();
+	rrepo.rid = rid_to_oid(rid);
+	git_repository* repo = 0;
+	char* path = malloc(strlen(rad_home)+64);
+	sprintf(path,"%s/storage/%s",rad_home,rid);
+	if (git_repository_open(&repo,path)) {
+	    eprintf("failed to open git repository at path %s",path);
+	    return 1;
+	}
+	rrepo.repo = repo;
+    }
+    else if (get_rad_repo_from_cwd(&rrepo)) {
 	eprintf("failed to get rad repo from cwd");
 	return 1;
     }
@@ -1953,6 +1937,38 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen, const char* rid, bool json
 	    json_object_object_add(state_obj,"reason",json_object_new_string(state.reason));
 	}
 	json_object_object_add(obj,"state",state_obj);
+
+	SimpleSet labels;
+	set_init(&labels);
+	if (get_issue_labels(&labels,issue_id)) {
+	    eprintf("failed to get labels for issue");
+	    return 1;
+	}
+	size_t n_labels = 0;
+	char** labels_list = set_to_array(&labels,&n_labels);
+	if (n_labels) {
+	    json_object* labels_arr = json_object_new_array();
+	    for (size_t i=0; i<n_labels; i++) {
+		json_object_array_add(labels_arr,json_object_new_string(labels_list[i]));
+	    }
+	    json_object_object_add(obj,"labels",labels_arr);
+	}
+
+	SimpleSet assignees;
+	set_init(&assignees);
+	if (get_issue_assignees(&assignees,issue_id)) {
+	    eprintf("failed to get assignees for issue");
+	    return 1;
+	}
+	size_t n_assigned = 0;
+	char** assigned_list = set_to_array(&assignees,&n_assigned);
+	if (n_assigned) {
+	    json_object* assigned_arr = json_object_new_array();
+	    for (size_t i=0; i<n_assigned; i++) {
+		json_object_array_add(assigned_arr,json_object_new_string(assigned_list[i]));
+	    }
+	    json_object_object_add(obj,"assignees",assigned_arr);
+	}
 	
  	json_object* comment_obj = json_object_new_object(); // first comment is the description of the issue
 	json_object_object_add(comment_obj,"id",json_object_new_string(issue_id_str));
@@ -1971,7 +1987,44 @@ int issue_show (Oid issue_id, size_t issue_id_hexlen, const char* rid, bool json
 	printf("Status  %s",state.status);
 	if (state.reason && strlen(state.reason))
 	    printf(" (%s)",state.reason);
-	printf("\n\n");
+	printf("\n");
+	SimpleSet labels;
+	set_init(&labels);
+	if (get_issue_labels(&labels,issue_id)) {
+	    eprintf("failed to get labels for issue");
+	    return 1;
+	}
+	size_t n_labels = 0;
+	char** labels_list = set_to_array(&labels,&n_labels);
+	if (n_labels) {
+	    char* labels_str = malloc(n_labels*260+2);
+	    strcpy(labels_str,"");
+	    for (size_t i=0; i<n_labels; i++) {
+		strcat(labels_str,labels_list[i]);
+		if (i<n_labels-1)
+		    strcat(labels_str,",");
+	    }
+	    printf("Labels  %s\n",labels_str);
+	}
+	SimpleSet assignees;
+	set_init(&assignees);
+	if (get_issue_assignees(&assignees,issue_id)) {
+	    eprintf("failed to get assignees for issue");
+	    return 1;
+	}
+	size_t n_assigned = 0;
+	char** assigned_list = set_to_array(&assignees,&n_assigned);
+	if (n_assigned) {
+	    char* assigned_str = malloc(n_assigned*260+2);
+	    strcpy(assigned_str,"");
+	    for (size_t i=0; i<n_assigned; i++) {
+		strcat(assigned_str,assigned_list[i]);
+		if (i<n_assigned-1)
+		    strcat(assigned_str,",");
+	    }
+	    printf("Assign  %s\n",assigned_str);
+	}
+	printf("\n");
 	printf("%s\n\n",get_issue_description(rrepo,issue_id));
     }
     

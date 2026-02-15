@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <libgen.h>
 
 #include <repo.h>
 #include <profile.h>
@@ -431,32 +432,43 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
     Oid rid = {{0}};
     char buf [HEXSIZ];
 
-    //check local repo with git fsck
-    char* argv [5];
-    argv[0] = "git";
-    argv[1] = "-C";
-    argv[2] = strdup(path);
-    argv[3] = "fsck";
-    argv[4] = 0;
-    if (exec_command("git",argv)) {
-	eprintf("git fsck command failed on %s",path);
-	return rid;
-    }
-
-    // get candidate rid from the git config for the rad remote
     git_repository* repo = 0;
     if (git_repository_open(&repo,path)) {
 	eprintf("failed to open git repository at %s",path);
 	return rid;
     }
-    Oid rid_candidate = rid_of_rad_remote(repo);
-    if (git_oid_is_zero(&rid_candidate)) {
-	eprintf("failed to get candidate rid");
-	return rid;
+
+    Oid rid_candidate = {{0}};
+    const char* rid_candidate_str = 0;
+    char* argv [5];
+    argv[0] = "git";
+    argv[1] = "-C";
+    argv[2] = 0;
+    argv[3] = "fsck";
+    argv[4] = 0;
+
+    if (git_repository_is_bare(repo)) {
+	rid_candidate_str = basename(strdup(path));
+	rid_candidate = rid_to_oid(rid_candidate_str);
     }
-    const char* rid_candidate_str = oid_to_rid(rid_candidate);
+    else { // only for the local (working) repo
+	//check local repo with git fsck
+	argv[2] = strdup(path);
+	if (exec_command("git",argv)) {
+	    eprintf("git fsck command failed on %s",path);
+	    return rid;
+	}	
+	// get candidate rid from the git config for the rad remote
+	rid_candidate = rid_of_rad_remote(repo);
+	if (git_oid_is_zero(&rid_candidate)) {
+	    eprintf("failed to get candidate rid");
+	    return rid;
+	}
+	rid_candidate_str = oid_to_rid(rid_candidate);
+    }
 
     // setup rad repo struct and get the radicle storage path for the candidate rid
+
     RadRepo rrepo;
     rrepo.repo = 0;
     rrepo.rid = rid_candidate;

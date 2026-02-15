@@ -6,6 +6,7 @@
 typedef struct {
     char err;
     char* seed;
+    char* rid;
 } SyncCommand;
 
 int sync_run (Command c);
