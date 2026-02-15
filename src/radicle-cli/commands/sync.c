@@ -215,6 +215,8 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	    closedir(d);
 	}
 
+	// sync canonical head
+	
 	git_repository* repo_dst = 0;
 	if (git_repository_open(&repo_dst,dst)) {
 	    eprintf("failed to open git repository at %s",dst);
@@ -274,6 +276,46 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 		return 1;
 	    }
 	}
+
+	// sync identity document
+
+	Oid rad_id = {{0}};
+	if (git_reference_name_to_id(&rad_id,repo_dst,"refs/rad/id")) {
+	    eprintf("failed to lookup rad oid");
+	    return 1;
+	}
+	commit = 0;
+	if (git_commit_lookup(&commit,repo_dst,&rad_id)) {
+	    eprintf("failed to lookup git commit");
+	    return 1;
+	}
+	Oid rad_id_tmp = {{0}};
+	if (git_reference_name_to_id(&rad_id_tmp,repo_dsttmp,"refs/rad/id")) {
+	    eprintf("failed to lookup rad oid");
+	    return 1;
+	}
+	commit_tmp = 0;
+	if (git_commit_lookup(&commit_tmp,repo_dsttmp,&rad_id_tmp)) {
+	    eprintf("failed to lookup git commit");
+	    return 1;
+	}
+	if (git_commit_time(commit_tmp) > git_commit_time(commit)) {
+	    char* src_cur = malloc(strlen(dsttmp)+16);
+	    sprintf(src_cur,"%srefs/rad/id",dsttmp);
+	    char* dst_cur = malloc(strlen(dst)+16);
+	    sprintf(dst_cur,"%srefs/rad/",dst);
+	    argv[0] = "rsync";
+	    argv[1] = "-a";
+	    argv[2] = src_cur;
+	    argv[3] = dst_cur;
+	    argv[4] = 0;
+	    //iprintf("exec: %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3]);	
+	    if (exec_command("rsync",argv)) {
+		eprintf("rsync command failed");
+		return 1;
+	    }
+	}
+	
 	
 	argv[0] = "rm";
 	argv[1] = "-rf";
@@ -373,6 +415,8 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	    }
 	    closedir(d);
 	}
+
+	// sync canonical HEAD
 	
 	git_repository* repo_dst = 0;
 	if (git_repository_open(&repo_dst,dst)) {
@@ -432,8 +476,47 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 		eprintf("rsync command failed");
 		return 1;
 	    }
-	}	
-    }
+	}
+
+	// sync refs/rad/id
+	
+	Oid rad_id = {{0}};
+	if (git_reference_name_to_id(&rad_id,repo_dst,"refs/rad/id")) {
+	    eprintf("failed to lookup rad oid");
+	    return 1;
+	}
+	commit = 0;
+	if (git_commit_lookup(&commit,repo_dst,&rad_id)) {
+	    eprintf("failed to lookup git commit");
+	    return 1;
+	}
+	Oid rad_id_src = {{0}};
+	if (git_reference_name_to_id(&rad_id_src,repo_src,"refs/rad/id")) {
+	    eprintf("failed to lookup rad oid");
+	    return 1;
+	    }
+	commit_src = 0;
+	if (git_commit_lookup(&commit_src,repo_src,&rad_id_src)) {
+	    eprintf("failed to lookup git commit");
+	    return 1;
+	}
+	if (git_commit_time(commit_src) > git_commit_time(commit)) {
+	    char* src_cur = malloc(strlen(src)+16);
+	    sprintf(src_cur,"%s/refs/rad/id",src);
+	    char* dst_cur = malloc(strlen(dst)+16);
+	    sprintf(dst_cur,"%srefs/rad/",dst);
+	    argv[0] = "rsync";
+	    argv[1] = "-a";
+	    argv[2] = src_cur;
+	    argv[3] = dst_cur;
+	    argv[4] = 0;	    
+	    //iprintf("exec: %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3]);	
+	    if (exec_command("rsync",argv)) {
+		eprintf("rsync command failed");
+		return 1;
+	    }
+	}
+    }	
 
     Oid rid_valid = {{0}};
     if (strlen(cwd))

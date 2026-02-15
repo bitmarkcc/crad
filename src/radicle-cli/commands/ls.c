@@ -62,7 +62,7 @@ int ls_run (Command c) {
 	rad_git_init();
 	bool have_dir = false;
 	while (dir = readdir(d)) {
-	    if (strlen(dir->d_name)>2 && strlen(dir->d_name)<40) { // todo handle edge cases
+	    if (strlen(dir->d_name)>2 && strlen(dir->d_name)<32) { // todo handle edge cases
 		if (!have_dir) {
 		    printf("Name-------------RID---------------------------Visibility-Head----Description\n");
 		    have_dir = true;
