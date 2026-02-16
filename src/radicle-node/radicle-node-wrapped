@@ -2,10 +2,13 @@
 
 set -e
 
+if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
+then
+    export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
+fi
+
 rad_home="`crad self --node-home`"
 
 cradicle-node
 
-exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/bin:/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" rad node start $@
-
-#exec bwrap --bind "$rad_home" /tmp/.radicle --bind "$crad_home"/bin /tmp/bin --ro-bind / / --clearenv --unshare-all --share-net --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/bin:/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" bash $@
+exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/bin:/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" --setenv RAD_PASSPHRASE "$RAD_PASSPHRASE" rad node start $@

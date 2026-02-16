@@ -343,10 +343,13 @@ int sync_run (Command c) { // todo: sync refs/rad/id
     }
     else { // use rad
 	char* argv [3];
-	argv[0] = "rad-sync-wrapped";
+	char* bin_path = malloc(strlen(crad_home)+32);
+	sprintf(bin_path,"%s/bin/rad-sync-wrapped",crad_home);
+	argv[0] = bin_path;
 	argv[1] = rid_str;
 	argv[2] = 0;
-	if (exec_command("rad-sync-wrapped",argv)) {
+	//iprintf("exec: %s -- %s",argv[0],argv[1]);
+	if (exec_command(bin_path,argv)) {
 	    eprintf("rad sync (wrapped) command failed");
 	    return 1;
 	}

@@ -1,5 +1,12 @@
 #!/bin/bash
 
+set -e
+
+if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
+then
+    export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
+fi
+
 ridfull="$1"
 rid="${ridfull:4}"
 dir="$2"

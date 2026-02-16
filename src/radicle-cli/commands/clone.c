@@ -63,17 +63,17 @@ int clone_run (Command c) {
 	const char* user = strtok(strdup(userhost),"@");
 	const char* host = strtok(0,"@");
 	// create ssh config file
-	const char* rad_home = get_rad_home();
-	char* config_dir = malloc(strlen(rad_home)+6);
-	sprintf(config_dir,"%s/.ssh",rad_home);
+	const char* crad_home = get_rad_home();
+	char* config_dir = malloc(strlen(crad_home)+6);
+	sprintf(config_dir,"%s/.ssh",crad_home);
 	if (access(config_dir,F_OK)) {
 	    if (mkdir(config_dir,0755)) {
 		eprintf("Can't create ssh directory");
 		return 1;
 	    }
 	}
-	char* config_fname = malloc(strlen(rad_home)+13);
-	sprintf(config_fname,"%s/.ssh/config",rad_home);
+	char* config_fname = malloc(strlen(crad_home)+13);
+	sprintf(config_fname,"%s/.ssh/config",crad_home);
 	FILE* f = fopen(config_fname,"w");
 	char line [256];
 	fputs("Host seed\n",f);
@@ -83,7 +83,7 @@ int clone_run (Command c) {
 	fputs(line,f);
 	sprintf(line,"  User %s\n",user);
 	fputs(line,f);
-	sprintf(line,"  IdentityFile %s/.pw/radicle.key\n",rad_home);
+	sprintf(line,"  IdentityFile %s/.pw/radicle.key\n",crad_home);
 	fputs(line,f);
 	fputs("  ProxyCommand ncat --proxy-type socks5 --proxy 127.0.0.1:9050 %h %p\n",f);
 	fputs("  StrictHostKeyChecking no\n",f);
@@ -96,15 +96,15 @@ int clone_run (Command c) {
 	argv[3] = "--no-g";
 	argv[4] = "--old-args";
 	argv[5] = "-e";
-	char* rsh = malloc(strlen(rad_home)+20);
-	sprintf(rsh,"ssh -F %s/.ssh/config",rad_home);
+	char* rsh = malloc(strlen(crad_home)+20);
+	sprintf(rsh,"ssh -F %s/.ssh/config",crad_home);
 	argv[6] = rsh;
 	rid_str = strdup(c.argv[2]);
 	char* src = malloc(strlen(cmd.seed)+strlen(rid_str)+2);
 	sprintf(src,"seed:%s",rid_str+4);
 	argv[7] = src;
-	char* dst = malloc(strlen(rad_home)+128);
-	sprintf(dst,"%s/storage/%s/",rad_home,rid_str+4);
+	char* dst = malloc(strlen(crad_home)+128);
+	sprintf(dst,"%s/storage/%s/",crad_home,rid_str+4);
 	argv[8] = dst;
 	argv[9] = 0;
 	//iprintf("exec: %s -- %s -- %s -- %s -- %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3],argv[4],argv[5],argv[6],argv[7]);
@@ -120,7 +120,7 @@ int clone_run (Command c) {
 	    }
 	}
 
-	if (load_cleartext_privkey_file(rad_home)) {
+	if (load_cleartext_privkey_file(crad_home)) {
 	    eprintf("failed to load cleartext privkey file");
 	    return 1;
 	}
@@ -130,7 +130,7 @@ int clone_run (Command c) {
 	    return 1;
 	}
 
-	if (unload_cleartext_privkey_file(rad_home)) {
+	if (unload_cleartext_privkey_file(crad_home)) {
 	    eprintf("failed to unload cleartext privkey file");
 	    return 1;
 	}
@@ -230,8 +230,12 @@ int clone_run (Command c) {
     }
     else { // use _rad_ , todo: set correct alias and did in config for rad repo
 	iprintf("cloning using rad-clone-wrapped");
+	const char* rad_home = get_rad_node_home();
+	const char* crad_home = get_rad_home();
 	char* argv [5];
-	argv[0] = "rad-clone-wrapped";
+	char* bin_path = malloc(strlen(crad_home)+32);
+	sprintf(bin_path,"%s/bin/rad-clone-wrapped",crad_home);
+	argv[0] = bin_path;
 	rid_str = strdup(c.argv[0]);
 	argv[1] = rid_str; // must be in format rad:zyx...cba
 	if (c.argc > 1) {
@@ -247,8 +251,6 @@ int clone_run (Command c) {
 	}
 	clone_dir = argv[2];
 	
-	const char* rad_home = get_rad_node_home();
-	const char* crad_home = get_rad_home();
 	char* rad_repo_path = malloc(strlen(rad_home)+128);
 	char* crad_repo_path = malloc(strlen(crad_home)+128);
 	sprintf(rad_repo_path,"%s/storage/%s",rad_home,rid_str+4);
