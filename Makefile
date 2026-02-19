@@ -1,4 +1,5 @@
-PREFIX   ?= $(HOME)/.cradicle
+CRAD_HOME ?= $(HOME)/.cradicle
+PREFIX   ?= $(CRAD_HOME)
 CC       ?= gcc
 CFLAGS   ?= -g -fPIC
 LDFLAGS  ?=
@@ -65,6 +66,7 @@ REMOTE_OUT = $(BUILDDIR)/git-remote-rad
 SCRIPTS = src/radicle-node/radicle-node-wrapped \
           src/radicle-node/rad-clone-wrapped \
           src/radicle-node/rad-sync-wrapped \
+          src/radicle-node/rad-auth-wrapped \
           src/radicle-rsync/crad-rsync
 
 EXECUTABLES = $(CLI_OUT) $(NODE_OUT) $(REMOTE_OUT)

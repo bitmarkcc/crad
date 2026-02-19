@@ -359,7 +359,7 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	return oid_ret;
     }
     if (rad_sig_verify(refs_str,strlen(refs_str),sig_bytes,signer)) {
-	eprintf("failed to verify sig (test)\n");
+	eprintf("failed to verify sig\n");
 	return oid_ret;
     }
     Oid oid_sig = {{0}};

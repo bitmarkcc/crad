@@ -131,6 +131,7 @@ char* profile_get_password (const char* rad_home) {
 	    fprintf(stderr,"Can't read passphrase from password file\n");
 	    return 0;
 	}
+	fclose(f);
 	rad_rstrip_nl(passphrase);
     }
     else {
@@ -145,8 +146,8 @@ char* profile_get_password (const char* rad_home) {
 	    fprintf(stderr,"Failed to put password in password file\n");
 	    return 0;
 	}
+	fclose(f);
     }
-    fclose(f);
     return passphrase;
 }
 
@@ -215,6 +216,7 @@ int profile_get_privkey (ssh_key* key, char* passphrase) {
 		fprintf(stderr,"Failed to put password in password file\n");
 		return 0;
 	    }
+	    fclose(f);
 	}
     }
     else {
@@ -229,7 +231,7 @@ int profile_get_privkey (ssh_key* key, char* passphrase) {
 }
 
 bool profile_init (const char* alias, const char* passphrase, const uint8_t* seed) {
-
+    
     char* rad_home = get_rad_home();
 
     if (!rad_home) {
@@ -346,8 +348,15 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     char* pw_dir = malloc(strlen(rad_home)+5);
     sprintf(pw_dir,"%s/.pw",rad_home);
     if (access(pw_dir,F_OK)) {
-	if (mkdir(pw_dir,0700)) {
-	    fprintf(stderr,"Can't create password directory\n");
+	char tmp_template[] = "/tmp/crad-pw-XXXXXX";
+	char* tmp_dir = mkdtemp(tmp_template);
+	if (!tmp_dir) {
+	    fprintf(stderr,"Can't create temp password directory\n");
+	    return false;
+	}
+	chmod(tmp_dir,0700);
+	if (symlink(tmp_dir,pw_dir)) {
+	    fprintf(stderr,"Can't create symlink to password directory\n");
 	    return false;
 	}
     }
@@ -355,13 +364,14 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     sprintf(pw_file,"%s/radicle",pw_dir);
     f = fopen(pw_file,"w");
     if (!f) {
-	fprintf(stderr,"Can't open password file for reading\n");
+	fprintf(stderr,"Can't open password file for writing\n");
 	return 1;
     }
     if (fputs(passphrase,f)==EOF) {
 	fprintf(stderr,"Failed to put password in password file\n");
 	return 1;
     }
+    fclose(f);
     
     uint8_t* pubkey_raw = 0;
     rc = ssh_pki_get_pubkey_raw(key,&pubkey_raw);
@@ -428,7 +438,25 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	    eprintf("failed to execute sql command: %s",err_msg);
 	    return 1;
 	}
-    }    
+    }
+
+    // Create radicle (not Cradicle) keypair in $RAD_HOME, if $RAD_HOME/keys does not exists
+
+    const char* rad_node_home = get_rad_node_home();
+
+    char* argv[5];
+    char* bin_path = malloc(strlen(rad_home)+32);
+    sprintf(bin_path,"%s/bin/rad-auth-wrapped",rad_home);
+    argv[0] = bin_path;
+    argv[1] = "--alias";
+    argv[2] = strdup(alias);
+    argv[3] = "--stdin";
+    argv[4] = 0;
+    
+    if (exec_command_inp(bin_path,argv,"\n")) {
+	eprintf("rad auth (wrapped) command failed");
+	return 1;
+    }
     
     if (did) {
 	printf("Your Radicle DID is %s\n",did);

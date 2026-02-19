@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -e
+
+if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
+then
+    export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
+fi
+
+rad_home="$HOME/.radicle"
+if [ -n "$RAD_HOME" ]
+then
+    rad_home="$RAD_HOME"
+fi
+
+if [ ! -e "$rad_home/keys" ]
+then
+    # Seed the repo (local policy update, no network needed)
+    bwrap \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    -- rad auth "$@"
+fi
