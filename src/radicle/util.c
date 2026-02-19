@@ -222,7 +222,7 @@ int exec_command (const char* file, char* const argv []) {
 	}
 	else {
 	    fprintf(stderr,"%s command ended abnormaly\n",argv[0]);
-	}	
+	    }
 	return 0;
     }
 }

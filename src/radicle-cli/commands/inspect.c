@@ -168,7 +168,7 @@ int inspect_run (Command c) {
 	    const char* head = strdup(buf);
 	    
 	    if (cmd.get_rid) {
-		printf("rid %s\n",rid_str);
+		printf("rid rad:%s\n",rid_str);
 	    }
 	    
 	    if (cmd.name) {

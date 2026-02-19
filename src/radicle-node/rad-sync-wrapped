@@ -1,4 +1,11 @@
 #!/bin/bash
+#
+# Sync a repository to the Radicle network via the running rad node.
+# rad commands run in a filesystem-isolated sandbox. No network access
+# is needed — communication with the node is via the control socket.
+#
+# Requirements: bwrap, rad node must be running (via radicle-node-wrapped)
+#
 
 set -e
 
@@ -7,13 +14,66 @@ then
     export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
 fi
 
-dir="`pwd`"
-
+crad_home="`crad self --home`"
 rad_home="`crad self --node-home`"
 
-if [ $# -gt 0 ]
-then
-    exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" rad sync $@
-else
-    exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --bind $dir /tmp/workdir --chdir /tmp/workdir --setenv HOME "/tmp" --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" rad sync
+# Resolve the RID: from argument or from CWD
+rid="$1"
+if [ -z "$rid" ]; then
+    rid="`crad inspect --rid | awk '{print $2}'`"
 fi
+
+if [ -z "$rid" ]; then
+    echo "Error: no RID specified and none found in current directory" >&2
+    exit 1
+fi
+
+crad_repo="$crad_home/storage/$rid"
+rad_repo="$rad_home/storage/$rid"
+
+# Copy repo from crad storage to rad storage if it doesn't exist there
+if [ -d "$crad_repo" ] && [ ! -d "$rad_repo" ]; then
+    cp -a "$crad_repo" "$rad_repo"
+fi
+
+# Seed the repo (local policy update, no network needed)
+bwrap \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    -- rad seed --no-fetch "$rid"
+
+# Ask the running node to announce inventory to peers
+bwrap \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    -- rad sync --inventory

@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# Run the Rust-based rad node inside a bubblewrap sandbox with all
+# network traffic forced through Tor.
+#
+# Requirements: bwrap, slirp4netns, torsocks, tor (running on host at 127.0.0.1:9050)
+#
 
 set -e
 
@@ -11,4 +17,73 @@ rad_home="`crad self --node-home`"
 
 cradicle-node
 
-exec bwrap --ro-bind /usr /usr --ro-bind /bin /bin --ro-bind /lib /lib --ro-bind /lib64 /lib64 --ro-bind /etc /etc --proc /proc --dev /dev --tmpfs /tmp --clearenv --unshare-all --share-net --bind "$rad_home" /tmp/.radicle --chdir /tmp --setenv HOME "/tmp" --setenv PATH "/tmp/bin:/tmp/.radicle/bin:/usr/bin:/bin" --setenv LANG "$LANG" --setenv TERM "$TERM" --setenv RAD_PASSPHRASE "$RAD_PASSPHRASE" rad node start $@
+# --- Tor-isolated sandbox for the Rust-based rad node ---
+# From here on, disable set -e to avoid subtle interactions with
+# background processes, wait, and signal handling.
+set +e
+
+info_pipe=$(mktemp -u)
+mkfifo "$info_pipe"
+
+cleanup() {
+    [ -n "$slirp_pid" ] && kill "$slirp_pid" 2>/dev/null
+    [ -n "$bwrap_pid" ] && kill "$bwrap_pid" 2>/dev/null
+    rm -f "$info_pipe"
+    exec 4<&- 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
+bwrap \
+    --json-status-fd 3 \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/bin:/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    --setenv RAD_PASSPHRASE "$RAD_PASSPHRASE" \
+    --setenv TORSOCKS_TOR_ADDRESS "10.0.2.2" \
+    --setenv TORSOCKS_TOR_PORT "9050" \
+    --setenv TORSOCKS_ALLOW_INBOUND "1" \
+    -- sh -c '
+        for _ in $(seq 1 50); do
+            ip link show tap0 >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+        exec torsocks rad node start "$@"
+    ' _ "$@" \
+    3>"$info_pipe" &
+
+bwrap_pid=$!
+
+# Keep the FIFO read end open on fd 4 to prevent SIGPIPE killing bwrap
+# when it writes a second JSON status after its child exits.
+exec 4< "$info_pipe"
+child_pid=$(python3 -c "import json,sys; print(json.loads(sys.stdin.readline())['child-pid'])" <&4)
+
+if [ -z "$child_pid" ]; then
+    echo "Error: failed to read child PID from bwrap" >&2
+    exit 1
+fi
+
+slirp4netns --configure --mtu=65520 --enable-ipv6 --userns-path="/proc/$child_pid/ns/user" "$child_pid" tap0 &
+slirp_pid=$!
+
+# Wait for the sandboxed node to exit. Use a poll loop so that
+# transient signal interruptions or bwrap parent exiting don't
+# cause the script to exit and kill slirp4netns prematurely.
+while kill -0 "$child_pid" 2>/dev/null; do
+    wait "$bwrap_pid" 2>/dev/null || true
+    sleep 1
+done
