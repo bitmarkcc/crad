@@ -26,7 +26,6 @@ LIB_SRC = src/radicle/base58.c \
           src/radicle/set.c \
           src/radicle/storage.c \
           src/radicle/util.c \
-          src/radicle/cob/common.c \
           src/radicle/cob/identity.c \
           src/radicle/cob/issue.c
 
