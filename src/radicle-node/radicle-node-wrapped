@@ -1,12 +1,26 @@
 #!/bin/bash
 #
-# Run the Rust-based rad node inside a bubblewrap sandbox with all
-# network traffic forced through Tor.
+# Run the Rust-based rad node inside a bubblewrap sandbox.
 #
-# Requirements: bwrap, slirp4netns, torsocks, tor (running on host at 127.0.0.1:9050)
+# By default, all network traffic is forced through Tor.
+# Use --clearnet to connect directly without Tor.
+#
+# Requirements:
+#   Default (Tor): bwrap, slirp4netns, torsocks, tor (on host at 127.0.0.1:9050)
+#   Clearnet:      bwrap, slirp4netns
 #
 
 set -e
+
+use_tor=true
+args=()
+for arg in "$@"; do
+    if [ "$arg" = "--clearnet" ]; then
+        use_tor=false
+    else
+        args+=("$arg")
+    fi
+done
 
 if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
 then
@@ -17,7 +31,7 @@ rad_home="`crad self --node-home`"
 
 cradicle-node
 
-# --- Tor-isolated sandbox for the Rust-based rad node ---
+# --- Sandboxed rad node ---
 # From here on, disable set -e to avoid subtle interactions with
 # background processes, wait, and signal handling.
 set +e
@@ -32,6 +46,30 @@ cleanup() {
     exec 4<&- 2>/dev/null
 }
 trap cleanup EXIT INT TERM
+
+if [ "$use_tor" = true ]; then
+    node_cmd='
+        for _ in $(seq 1 50); do
+            ip link show tap0 >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+        exec torsocks rad node start "$@"
+    '
+    tor_env=(
+        --setenv TORSOCKS_TOR_ADDRESS "10.0.2.2"
+        --setenv TORSOCKS_TOR_PORT "9050"
+        --setenv TORSOCKS_ALLOW_INBOUND "1"
+    )
+else
+    node_cmd='
+        for _ in $(seq 1 50); do
+            ip link show tap0 >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+        exec rad node start "$@"
+    '
+    tor_env=()
+fi
 
 bwrap \
     --json-status-fd 3 \
@@ -53,16 +91,8 @@ bwrap \
     --setenv LANG "$LANG" \
     --setenv TERM "$TERM" \
     --setenv RAD_PASSPHRASE "$RAD_PASSPHRASE" \
-    --setenv TORSOCKS_TOR_ADDRESS "10.0.2.2" \
-    --setenv TORSOCKS_TOR_PORT "9050" \
-    --setenv TORSOCKS_ALLOW_INBOUND "1" \
-    -- sh -c '
-        for _ in $(seq 1 50); do
-            ip link show tap0 >/dev/null 2>&1 && break
-            sleep 0.1
-        done
-        exec torsocks rad node start "$@"
-    ' _ "$@" \
+    "${tor_env[@]}" \
+    -- sh -c "$node_cmd" _ "${args[@]}" \
     3>"$info_pipe" &
 
 bwrap_pid=$!
