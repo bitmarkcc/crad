@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# Run rad clone inside a bubblewrap sandbox with all network traffic
-# forced through Tor.
+# Run rad clone inside a bubblewrap sandbox. No network access is needed —
+# the running rad node (via radicle-node-wrapped) handles the actual fetch.
+# rad clone communicates with the node via the control socket.
 #
-# Requirements: bwrap, slirp4netns, torsocks, tor (running on host at 127.0.0.1:9050)
+# Requirements: bwrap, rad node must be running (via radicle-node-wrapped)
 #
 
 set -e
@@ -13,29 +14,13 @@ then
     export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
 fi
 
-ridfull="$1"
-rid="${ridfull:4}"
 dir="$2"
 
 mkdir -p "$dir"
 
 rad_home="`crad self --node-home`"
 
-set +e
-
-info_pipe=$(mktemp -u)
-mkfifo "$info_pipe"
-
-cleanup() {
-    [ -n "$slirp_pid" ] && kill "$slirp_pid" 2>/dev/null
-    [ -n "$bwrap_pid" ] && kill "$bwrap_pid" 2>/dev/null
-    rm -f "$info_pipe"
-    exec 4<&- 2>/dev/null
-}
-trap cleanup EXIT INT TERM
-
 bwrap \
-    --json-status-fd 3 \
     --ro-bind /usr /usr \
     --ro-bind /bin /bin \
     --ro-bind /lib /lib \
@@ -54,27 +39,4 @@ bwrap \
     --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
     --setenv LANG "$LANG" \
     --setenv TERM "$TERM" \
-    --setenv TORSOCKS_TOR_ADDRESS "10.0.2.2" \
-    --setenv TORSOCKS_TOR_PORT "9050" \
-    --setenv TORSOCKS_ALLOW_INBOUND "1" \
-    -- sh -c '
-        for _ in $(seq 1 50); do
-            ip link show tap0 >/dev/null 2>&1 && break
-            sleep 0.1
-        done
-        exec torsocks rad clone "$@"
-    ' _ "$@" \
-    3>"$info_pipe" &
-
-bwrap_pid=$!
-
-exec 4< "$info_pipe"
-child_pid=$(python3 -c "import json,sys; print(json.loads(sys.stdin.readline())['child-pid'])" <&4)
-
-slirp4netns --configure --mtu=65520 --enable-ipv6 --userns-path="/proc/$child_pid/ns/user" "$child_pid" tap0 &
-slirp_pid=$!
-
-while kill -0 "$child_pid" 2>/dev/null; do
-    wait "$bwrap_pid" 2>/dev/null || true
-    sleep 1
-done
+    -- rad clone "$@"
