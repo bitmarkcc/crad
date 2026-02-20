@@ -33,16 +33,24 @@ repo_id="${rid#rad:}"
 crad_repo="$crad_home/storage/$repo_id"
 rad_repo="$rad_home/storage/$repo_id"
 
-# Get crad delegate NID
+# Get crad NID
 crad_nid="$(crad self --did)"
 crad_nid="${crad_nid#did:key:}"
 
-# Sync repo from crad storage to rad storage
-if [ -d "$crad_repo" ]; then
-    if [ ! -d "$rad_repo" ]; then
-        cp -a "$crad_repo" "$rad_repo"
-    else
-        git --git-dir="$rad_repo" fetch "$crad_repo" '+refs/*:refs/*' 2>/dev/null
+# Check if we are the delegate (our NID has signed refs in this repo)
+is_delegate=false
+if [ -d "$crad_repo" ] && git --git-dir="$crad_repo" rev-parse "refs/namespaces/$crad_nid/refs/rad/sigrefs" >/dev/null 2>&1; then
+    is_delegate=true
+fi
+
+if [ "$is_delegate" = true ]; then
+    # Delegate: push our refs to rad storage before fetching/announcing
+    if [ -d "$crad_repo" ]; then
+        if [ ! -d "$rad_repo" ]; then
+            cp -a "$crad_repo" "$rad_repo"
+        else
+            git --git-dir="$rad_repo" fetch "$crad_repo" '+refs/*:refs/*' 2>/dev/null
+        fi
     fi
 fi
 
@@ -67,9 +75,7 @@ bwrap \
     --setenv TERM "$TERM" \
     -- rad seed --no-fetch "$rid"
 
-# Announce the crad delegate's refs to the network via the node's control socket.
-# The crad delegate's sigrefs are already signed by crad and synced to rad storage.
-# AnnounceRefsFor tells the node to announce those namespaces so peers fetch them.
+# Fetch latest refs from the network
 bwrap \
     --ro-bind /usr /usr \
     --ro-bind /bin /bin \
@@ -88,7 +94,30 @@ bwrap \
     --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
     --setenv LANG "$LANG" \
     --setenv TERM "$TERM" \
-    -- python3 -c "
+    -- rad sync --fetch "rad:$repo_id"
+
+if [ "$is_delegate" = true ]; then
+    # Announce the crad delegate's refs via the node's control socket.
+    # The sigrefs are already signed by crad and synced to rad storage.
+    bwrap \
+        --ro-bind /usr /usr \
+        --ro-bind /bin /bin \
+        --ro-bind /lib /lib \
+        --ro-bind /lib64 /lib64 \
+        --ro-bind /etc /etc \
+        --proc /proc \
+        --dev /dev \
+        --tmpfs /tmp \
+        --clearenv \
+        --unshare-all \
+        --uid 0 --gid 0 \
+        --bind "$rad_home" /tmp/.radicle \
+        --chdir /tmp \
+        --setenv HOME "/tmp" \
+        --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+        --setenv LANG "$LANG" \
+        --setenv TERM "$TERM" \
+        -- python3 -c "
 import socket, json, sys
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.connect('/tmp/.radicle/node/control.sock')
@@ -102,3 +131,4 @@ if 'error' in result:
     sys.exit(1)
 print('Announced refs for ' + sys.argv[2], file=sys.stderr)
 " "$repo_id" "$crad_nid"
+fi
