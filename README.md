@@ -13,6 +13,8 @@ Dependencies:
 - tor
 - torsocks
 - slirp4netns
+- python3 (todo: remove this need)
+- bash
 - basic Linux utilities like rsync
 
 radicle-heartwood will run inside a bubblewrap container for security purposes.

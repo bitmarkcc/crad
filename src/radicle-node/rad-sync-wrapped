@@ -28,12 +28,22 @@ if [ -z "$rid" ]; then
     exit 1
 fi
 
-crad_repo="$crad_home/storage/$rid"
-rad_repo="$rad_home/storage/$rid"
+# Strip rad: prefix for storage paths
+repo_id="${rid#rad:}"
+crad_repo="$crad_home/storage/$repo_id"
+rad_repo="$rad_home/storage/$repo_id"
 
-# Copy repo from crad storage to rad storage if it doesn't exist there
-if [ -d "$crad_repo" ] && [ ! -d "$rad_repo" ]; then
-    cp -a "$crad_repo" "$rad_repo"
+# Get crad delegate NID
+crad_nid="$(crad self --did)"
+crad_nid="${crad_nid#did:key:}"
+
+# Sync repo from crad storage to rad storage
+if [ -d "$crad_repo" ]; then
+    if [ ! -d "$rad_repo" ]; then
+        cp -a "$crad_repo" "$rad_repo"
+    else
+        git --git-dir="$rad_repo" fetch "$crad_repo" '+refs/*:refs/*' 2>/dev/null
+    fi
 fi
 
 # Seed the repo (local policy update, no network needed)
@@ -57,7 +67,9 @@ bwrap \
     --setenv TERM "$TERM" \
     -- rad seed --no-fetch "$rid"
 
-# Ask the running node to announce inventory to peers
+# Announce the crad delegate's refs to the network via the node's control socket.
+# The crad delegate's sigrefs are already signed by crad and synced to rad storage.
+# AnnounceRefsFor tells the node to announce those namespaces so peers fetch them.
 bwrap \
     --ro-bind /usr /usr \
     --ro-bind /bin /bin \
@@ -76,4 +88,17 @@ bwrap \
     --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
     --setenv LANG "$LANG" \
     --setenv TERM "$TERM" \
-    -- rad sync --inventory
+    -- python3 -c "
+import socket, json, sys
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect('/tmp/.radicle/node/control.sock')
+cmd = json.dumps({'command': 'announceRefsFor', 'rid': 'rad:' + sys.argv[1], 'namespaces': [sys.argv[2]]})
+sock.sendall((cmd + '\n').encode())
+resp = sock.makefile().readline()
+sock.close()
+result = json.loads(resp)
+if 'error' in result:
+    print('Announce failed: ' + result.get('reason', resp), file=sys.stderr)
+    sys.exit(1)
+print('Announced refs for ' + sys.argv[2], file=sys.stderr)
+" "$repo_id" "$crad_nid"
