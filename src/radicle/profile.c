@@ -583,3 +583,46 @@ int unload_password () {
     }
     return 0;
 }
+
+char* get_rad_network_mode () {
+    FILE* f = 0;
+    const char* rad_home = get_rad_home();
+    if (!rad_home) {
+	eprintf("CRAD_HOME not found");
+	return 0;
+    }
+    char* network_mode_fname = malloc(strlen(rad_home)+32);
+    sprintf(network_mode_fname,"%s/node/network-mode",rad_home);
+    if (access(network_mode_fname,F_OK)) { // get from config.json
+	char* config_fname = malloc(strlen(rad_home)+16);
+	sprintf(config_fname,"%s/config.json",rad_home);
+	f = fopen(config_fname,"r");
+	char* buf = 0;
+	size_t len = 0;
+	ssize_t n_bytes_read = getdelim(&buf,&len,'\0',f);
+	if (n_bytes_read<0) {
+	    fprintf(stderr,"Failed to read config file\n");
+	    return 0;
+	}
+	fclose(f);
+	json_object* config_obj = json_tokener_parse(buf);
+	json_object* node_val = 0;
+	json_object* network_mode_val = 0;
+	json_object_object_get_ex(config_obj,"node",&node_val);
+	json_object_object_get_ex(node_val,"networkMode",&network_mode_val);
+	return strdup(json_object_get_string(network_mode_val));
+    }
+    f = fopen(network_mode_fname,"r");
+    if (!f) {
+	eprintf("failed to open network-mode file");
+	return 0;
+    }
+    char network_mode [64];
+    if (!fgets(network_mode,64,f)) {
+	eprintf("can't read network-mode from network-mode file");
+	return 0;
+    }
+    fclose(f);
+    rad_rstrip_nl(network_mode);
+    return strdup(network_mode);
+}

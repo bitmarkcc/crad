@@ -10,6 +10,7 @@ typedef struct {
     bool authed;
     bool alias;
     bool node_home;
+    bool network_mode;
 } SelfCommand;
 
 int self_run (Command c);

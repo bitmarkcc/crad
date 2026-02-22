@@ -14,12 +14,13 @@ SelfCommand command_self_default () {
     cmd.authed = false;
     cmd.alias = false;
     cmd.node_home = false;
+    cmd.network_mode = false;
     return cmd;
 }
 
 void print_help_self () {
     printf("crad self (Show information about your identity and device) Usage:\n");
-    printf("crad self [--did] [--home] [--authed] [--alias] [--node-home]\n");
+    printf("crad self [--did] [--home] [--authed] [--alias] [--node-home] [--network-mode]\n");
 }
 
 SelfCommand parse_args_self (int argc, char** argv) {
@@ -39,6 +40,9 @@ SelfCommand parse_args_self (int argc, char** argv) {
 	}
 	else if (!strcmp(argv[i],"--node-home")) {
 	    cmd.node_home = true;
+	}
+	else if (!strcmp(argv[i],"--network-mode")) {
+	    cmd.network_mode = true;
 	}
     }
     return cmd;
@@ -110,6 +114,14 @@ int self_run (Command c) {
 		return 1;
 	    }
 	    printf("%s\n",node_home);
+	}
+	else if (cmd.network_mode) {
+	    const char* network_mode = get_rad_network_mode();
+	    if (!network_mode) {
+		eprintf("failed to get network mode");
+		return 1;
+	    }
+	    printf("%s\n",network_mode);
 	}
     }
     return 0;

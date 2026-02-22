@@ -28,6 +28,22 @@ then
 fi
 
 rad_home="`crad self --node-home`"
+crad_home="`crad self --home`"
+
+config_json="$crad_home/config.json"
+network_mode="`cat "$config_json" | jq .node.networkMode | tr -d '"'`"
+if [[ "$network_mode" == "clearnet" ]]
+then
+   use_tor=false
+fi
+
+# Write marker file indicating Tor/clearnet mode
+mkdir -p "$crad_home/node"
+if [ "$use_tor" == true ]; then
+    echo "tor" > "$crad_home/node/network-mode"
+else
+    echo "clearnet" > "$crad_home/node/network-mode"
+fi
 
 cradicle-node
 
@@ -43,6 +59,7 @@ cleanup() {
     [ -n "$slirp_pid" ] && kill "$slirp_pid" 2>/dev/null
     [ -n "$bwrap_pid" ] && kill "$bwrap_pid" 2>/dev/null
     rm -f "$info_pipe"
+    rm -f "$crad_home/node/network-mode"
     exec 4<&- 2>/dev/null
 }
 trap cleanup EXIT INT TERM

@@ -213,7 +213,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	const git_signature* gitsig = git_commit_committer(commit);
 	const char* email = gitsig->email;
 	Pubkey committer = {0};
-	committer.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
+	committer.bytes = raw_did_to_pubkey(rad_email_get_domain(email)); // todo handle this
 	if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer)) {
 	    eprintf("failed to validate ssh signature");
 	    return ret;
@@ -237,7 +237,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	    const git_signature* gitsig = git_commit_committer(parent);
 	    const char* email = gitsig->email;
 	    Pubkey committer_root = {0};
-	    committer_root.bytes = raw_did_to_pubkey(rad_email_get_domain(email));
+	    committer_root.bytes = raw_did_to_pubkey(rad_email_get_domain(email)); // todo handle this
 	    if (rad_sshsig_verify(oid_tree.id,20,sig.ptr,committer_root)) {
 		eprintf("failed to validate ssh signature of root commit");
 		return ret;

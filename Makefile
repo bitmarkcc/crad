@@ -66,6 +66,8 @@ SCRIPTS = src/radicle-node/radicle-node-wrapped \
           src/radicle-node/rad-clone-wrapped \
           src/radicle-node/rad-sync-wrapped \
           src/radicle-node/rad-auth-wrapped \
+          src/radicle-node/rad-node-status-wrapped \
+          src/radicle-node/rad-node-stop-wrapped \
           src/radicle-rsync/crad-rsync
 
 EXECUTABLES = $(CLI_OUT) $(NODE_OUT) $(REMOTE_OUT)
@@ -117,6 +119,8 @@ uninstall:
 	rm -f $(PREFIX)/bin/radicle-node-wrapped
 	rm -f $(PREFIX)/bin/rad-clone-wrapped
 	rm -f $(PREFIX)/bin/rad-sync-wrapped
+	rm -f $(PREFIX)/bin/rad-node-status-wrapped
+	rm -f $(PREFIX)/bin/rad-node-stop-wrapped
 	rm -f $(PREFIX)/bin/crad-rsync
 	rm -f $(PREFIX)/lib/libradicle.so
 

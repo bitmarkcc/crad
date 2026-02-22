@@ -34,5 +34,6 @@ int load_cleartext_privkey_file (const char* rad_home);
 int unload_cleartext_privkey_file (const char* rad_home);
 int unload_password();
 char* profile_get_alias (const char* rad_home);
+char* get_rad_network_mode ();
 
 #endif
