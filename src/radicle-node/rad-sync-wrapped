@@ -75,6 +75,42 @@ bwrap \
     --setenv TERM "$TERM" \
     -- rad seed --no-fetch "$rid"
 
+if [ "$is_delegate" = true ]; then
+# Add repo to node's inventory and announce to peers via control socket.
+# rad seed only updates seeding policy, not the node's runtime inventory.
+bwrap \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    -- python3 -c "
+import socket, json, sys
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect('/tmp/.radicle/node/control.sock')
+sock.sendall((json.dumps({'command': 'addInventory', 'rid': 'rad:' + sys.argv[1]}) + '\n').encode())
+resp = sock.makefile().readline()
+sock.close()
+result = json.loads(resp)
+if 'error' in result:
+    print('addInventory failed: ' + result.get('reason', resp), file=sys.stderr)
+    sys.exit(1)
+print('addInventory: ' + resp.strip(), file=sys.stderr)
+" "$repo_id"
+fi
+
 # Fetch latest refs from the network
 bwrap \
     --ro-bind /usr /usr \
