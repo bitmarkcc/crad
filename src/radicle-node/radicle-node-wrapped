@@ -13,14 +13,6 @@
 set -e
 
 use_tor=true
-args=()
-for arg in "$@"; do
-    if [ "$arg" = "--clearnet" ]; then
-        use_tor=false
-    else
-        args+=("$arg")
-    fi
-done
 
 if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
 then
@@ -30,12 +22,20 @@ fi
 rad_home="`crad self --node-home`"
 crad_home="`crad self --home`"
 
-config_json="$crad_home/config.json"
-network_mode="`cat "$config_json" | jq .node.networkMode | tr -d '"'`"
+network_mode="`crad self --network-mode`"
 if [[ "$network_mode" == "clearnet" ]]
 then
    use_tor=false
 fi
+
+args=()
+for arg in "$@"; do
+    if [ "$arg" = "--clearnet" ]; then
+        use_tor=false
+    else
+        args+=("$arg")
+    fi
+done
 
 # Write marker file indicating Tor/clearnet mode
 mkdir -p "$crad_home/node"
