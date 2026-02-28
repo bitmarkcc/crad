@@ -5,6 +5,7 @@
 #include <cob.h>
 #include <cob/identity.h>
 #include <cob/issue.h>
+#include <cob/patch.h>
 #include <document.h>
 #include <print.h>
 
@@ -646,6 +647,89 @@ RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* titl
     }
     Oid oid = rad_repo_sign_refs(rrepo,signer);
     if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+char** patch_actions_to_json_strings (const PatchAction* actions, size_t n) {
+    if (!n) return 0;
+    char** jsons = malloc(n*sizeof(char*));
+    const size_t HEXSIZ = GIT_OID_SHA1_HEXSIZE+1;
+    char buf[HEXSIZ];
+    for (size_t i=0; i<n; i++) {
+	json_object* obj = json_object_new_object();
+	PatchAction action = actions[i];
+	if (action.type == PATCH_ACTION_REVISION) {
+	    json_object_object_add(obj,"base",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.base)));
+	    json_object_object_add(obj,"description",json_object_new_string(action.description ? action.description : ""));
+	    json_object_object_add(obj,"oid",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&action.oid)));
+	    json_object_object_add(obj,"type",json_object_new_string("revision"));
+	}
+	else if (action.type == PATCH_ACTION_EDIT) {
+	    json_object_object_add(obj,"target",json_object_new_string(action.target ? action.target : "delegates"));
+	    json_object_object_add(obj,"title",json_object_new_string(action.title ? action.title : ""));
+	    json_object_object_add(obj,"type",json_object_new_string("edit"));
+	}
+	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
+    }
+    return jsons;
+}
+
+int transaction_patch_add_revision (PatchTransaction* tx, char* desc, Oid base, Oid oid) {
+    PatchAction action = action_patch_default();
+    action.type = PATCH_ACTION_REVISION;
+    action.description = desc;
+    action.base = base;
+    action.oid = oid;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+int transaction_patch_add_edit (PatchTransaction* tx, char* title, char* target) {
+    PatchAction action = action_patch_default();
+    action.type = PATCH_ACTION_EDIT;
+    action.title = title;
+    action.target = target ? target : "delegates";
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+RepoEntry create_cob_patch (RadRepo rrepo, char* message, PatchAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
+    Oid parents [1] = {get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 1;
+    char** contents = patch_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.patch";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[0];
+    Oid root_id = {{0}};
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,root_id);
+}
+
+RepoEntry cob_patch_open (RadRepo rrepo, Pubkey signer, char* title, char* desc, Oid base, Oid head) {
+    Oid zero = {{0}};
+    PatchTransaction tx = transaction_patch_default();
+    transaction_patch_add_revision(&tx,desc,base,head);
+    transaction_patch_add_edit(&tx,title,"delegates");
+    RepoEntry re = create_cob_patch(rrepo,"Create patch",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to open patch failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
 	re.oid = zero;
 	return re;
     }

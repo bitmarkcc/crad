@@ -27,7 +27,8 @@ LIB_SRC = src/radicle/base58.c \
           src/radicle/storage.c \
           src/radicle/util.c \
           src/radicle/cob/identity.c \
-          src/radicle/cob/issue.c
+          src/radicle/cob/issue.c \
+          src/radicle/cob/patch.c
 
 LIB_OBJ = $(patsubst src/radicle/%.c,$(BUILDDIR)/lib/%.o,$(LIB_SRC))
 LIB_OUT = $(BUILDDIR)/libradicle.so
@@ -43,6 +44,7 @@ CLI_SRC = src/radicle-cli/main.c \
           src/radicle-cli/commands/self.c \
           src/radicle-cli/commands/sync.c \
           src/radicle-cli/commands/ls.c \
+          src/radicle-cli/commands/patch.c \
           src/radicle-cli/commands/inspect.c
 
 CLI_OBJ = $(patsubst src/radicle-cli/%.c,$(BUILDDIR)/cli/%.o,$(CLI_SRC))

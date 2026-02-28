@@ -7,6 +7,7 @@
 #include <push.h>
 #include <util.h>
 #include <profile.h>
+#include <cob.h>
 
 int refspec_parse (char** src, char** dst, bool* force, const char* refspec) {
     if (!refspec) return 1;
@@ -137,9 +138,118 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	fprintf(stderr,"delete a ref (to implement)\n");
 	return 1;
     }
-    else if (!strcmp(dst,"refs/patches")) { // todo implement push to patches
-	fprintf(stderr,"open a patch (to implement)\n");
-	return 1;
+    else if (!strcmp(dst,"refs/patches")) { // open a new patch
+
+	// 1. Push commit objects to storage via send-pack (temp ref)
+	char* tmp_ref = malloc(len_namespace_prefix+64);
+	sprintf(tmp_ref,"%srefs/heads/patches/staging",namespace_prefix);
+	char* tmp_refspec = malloc(strlen(src_full)+strlen(tmp_ref)+3);
+	sprintf(tmp_refspec,"+%s:%s",src_full,tmp_ref);
+	char* argv [7];
+	argv[0] = "git";
+	argv[1] = "-C";
+	argv[2] = strdup(repo_path);
+	argv[3] = "send-pack";
+	argv[4] = strdup(rrepo_path);
+	argv[5] = tmp_refspec;
+	argv[6] = 0;
+	if (exec_command("git",argv)) {
+	    fprintf(stderr,"git send-pack failed for patch\n");
+	    return 1;
+	}
+
+	// 2. Compute merge base between canonical head and patch head
+	Oid head_oid;
+	memcpy(&head_oid,git_object_id(obj),sizeof(Oid));
+	// Get canonical head from the default branch in storage
+	char canonical_ref [256];
+	sprintf(canonical_ref,"refs/heads/%s",default_branch);
+	Oid canonical_oid = {{0}};
+	if (git_reference_name_to_id(&canonical_oid,rrepo.repo,canonical_ref)) {
+	    fprintf(stderr,"Failed to resolve canonical head %s\n",canonical_ref);
+	    // Clean up temp ref
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+	Oid base_oid = {{0}};
+	if (git_merge_base(&base_oid,rrepo.repo,&canonical_oid,&head_oid)) {
+	    fprintf(stderr,"Failed to compute merge base\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+	if (!git_oid_cmp(&base_oid,&head_oid)) {
+	    fprintf(stderr,"Patch commits are already included in the base branch\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+
+	// 3. Extract title and description from the head commit message
+	git_commit* head_commit = 0;
+	if (git_commit_lookup(&head_commit,rrepo.repo,&head_oid)) {
+	    fprintf(stderr,"Failed to lookup head commit\n");
+	    return 1;
+	}
+	const char* commit_msg = git_commit_message(head_commit);
+	char* title = 0;
+	char* desc = 0;
+	if (commit_msg) {
+	    const char* nl = strchr(commit_msg,'\n');
+	    if (nl) {
+		title = strndup(commit_msg,nl-commit_msg);
+		// Skip blank lines after title
+		nl++;
+		while (*nl == '\n' || *nl == '\r') nl++;
+		desc = strdup(nl);
+	    } else {
+		title = strdup(commit_msg);
+		desc = strdup("");
+	    }
+	} else {
+	    title = strdup("Untitled patch");
+	    desc = strdup("");
+	}
+
+	// 4. Create the patch COB
+	
+	Pubkey signer;
+	signer.bytes = raw_did_to_pubkey(did_raw);
+	RepoEntry re = cob_patch_open(rrepo,signer,title,desc,base_oid,head_oid);
+	if (git_oid_is_zero(&re.oid)) {
+	    fprintf(stderr,"Failed to create patch COB\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+
+	// 5. Create the long-lived patch head reference
+	//    refs/namespaces/<nid>/refs/heads/patches/<patch-cob-id>
+	char patch_ref [256];
+	char patch_id_str [HEXSIZ];
+	git_oid_tostr(patch_id_str,HEXSIZ,&re.oid);
+	sprintf(patch_ref,"%srefs/heads/patches/%s",namespace_prefix,patch_id_str);
+	git_reference* patch_head_ref = 0;
+	if (git_reference_create(&patch_head_ref,rrepo.repo,patch_ref,&head_oid,1,"Create reference for patch head")) {
+	    fprintf(stderr,"Failed to create patch head reference\n");
+	    return 1;
+	}
+
+	// 6. Delete the temp staging ref
+	git_reference* tmpref = 0;
+	if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+	    git_reference_delete(tmpref);
+
+	fprintf(stderr,"Patch %s opened\n",patch_id_str);
+	free(title);
+	free(desc);
+	printf("ok %s\n\n",dst);
+	return 0;
     }
     else if (strlen(dst)>18 && !strcmp(rad_substr(dst,0,19),"refs/heads/patches/")) {
 	fprintf(stderr,"update a patch (to implement)\n");

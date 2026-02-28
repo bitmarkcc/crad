@@ -256,13 +256,15 @@ int clone_run (Command c) {
 	sprintf(rad_repo_path,"%s/storage/%s",rad_home,rid_str+4);
 	sprintf(crad_repo_path,"%s/storage/%s",crad_home,rid_str+4);
 	
-	argv[0] = "cp";
+	char* rsync_src = malloc(strlen(rad_repo_path)+2);
+	sprintf(rsync_src,"%s/",rad_repo_path);
+	argv[0] = "rsync";
 	argv[1] = "-a";
-	argv[2] = rad_repo_path;
+	argv[2] = rsync_src;
 	argv[3] = crad_repo_path;
 	argv[4] = 0;
-	if (exec_command("cp",argv)) {
-	    eprintf("cp command failed");
+	if (exec_command("rsync",argv)) {
+	    eprintf("rsync command failed");
 	    return 1;
 	}
 
@@ -291,7 +293,31 @@ int clone_run (Command c) {
 	}
 	strcat(cwd,"/");
 	strcat(cwd,clone_dir);
-	rad_git_init();
+
+	// Reconfigure the rad remote to use the crad DID for push
+	git_repository* working = 0;
+	if (git_repository_open(&working,cwd)) {
+	    eprintf("failed to open working copy at %s",cwd);
+	    return 1;
+	}
+	if (git_remote_delete(working,"rad")) {
+	    eprintf("failed to delete existing rad remote");
+	    return 1;
+	}
+	const char* did_raw = pubkey_to_did(profile_get_pubkey().bytes)+8;
+	char fetchurl [128];
+	char pushurl [128];
+	strcpy(fetchurl,"rad://");
+	strcat(fetchurl,rid_str+4);
+	strcpy(pushurl,"rad://");
+	strcat(pushurl,rid_str+4);
+	strcat(pushurl,"/");
+	strcat(pushurl,did_raw);
+	if (rad_repo_configure_remote(working,"rad",fetchurl,pushurl)) {
+	    eprintf("failed to configure remote for git repository");
+	    return 1;
+	}
+	git_repository_free(working);
     }
 
     Oid rid_valid = rad_repo_validate(cwd);

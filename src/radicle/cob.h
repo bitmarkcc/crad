@@ -4,6 +4,7 @@
 #include <document.h>
 #include <repo.h>
 #include <cob/issue.h>
+#include <cob/patch.h>
 
 char* cob_type_name (CobType type);
 RepoEntry cob_identity_init (Document doc, git_repository* repo, Pubkey signer);
@@ -16,6 +17,7 @@ RepoEntry cob_issue_react (RadRepo rrepo, Pubkey signer, Oid issue_id, Oid reply
 RepoEntry cob_issue_state (RadRepo rrepo, Pubkey signer, Oid issue_id, IssueState state);
 int cob_issue_delete (RadRepo rrepo, Pubkey signer, Oid issue_id);
 RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* title, char* desc);
+RepoEntry cob_patch_open (RadRepo rrepo, Pubkey signer, char* title, char* desc, Oid base, Oid head);
 int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo);
 
 #endif
