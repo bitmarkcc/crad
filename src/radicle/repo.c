@@ -627,9 +627,33 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
     size_t n_sigref_entries = 0;
     char** sigref_entries_list = set_to_array(&sigref_entries,&n_sigref_entries);
 
-    // Compare the files/oids list with the rrepo files/oids list to make sure rrepo contains each of the files/oids in the local repo list.
+    // Get the default branch from the identity document so we only validate it
+    json_object* identity_doc = get_identity_document(rrepo.repo);
+    char* default_branch = 0;
+    json_object_object_foreach(identity_doc,idkey,idval) {
+	if (!strcmp(idkey,"payload")) {
+	    json_object_object_foreach(idval,pkey,pval) {
+		if (!strcmp(pkey,"xyz.radicle.project")) {
+		    json_object_object_foreach(pval,prkey,prval) {
+			if (!strcmp(prkey,"defaultBranch"))
+			    default_branch = rad_strip('"',json_object_to_json_string(prval));
+		    }
+		}
+	    }
+	}
+    }
+
+    // Compare the default branch ref from local repo with the rrepo to make sure rrepo contains it.
+    // Non-default branches (feature branches) are local-only and not expected in storage.
     bool allmatch = true;
     for (size_t i=0; i<n_files; i++) {
+	// Skip non-default branches
+	if (default_branch) {
+	    char default_ref [256];
+	    sprintf(default_ref,"refs/heads/%s",default_branch);
+	    if (strcmp(files_list[i],default_ref))
+		continue;
+	}
 	//iprintf("check file %s",files_list[i]);
 	bool matches = false;
 	for (size_t j=0; j<n_rrepo_files; j++) {
@@ -649,7 +673,7 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 
     // Check if the rrepo files/oids list matches with the sigref entries list
     for (size_t i=0; i<n_rrepo_files; i++) {
-	//iprintf("check rrepo ref %s",rrepo_files_list[i]);
+	iprintf("check rrepo ref %s",rrepo_files_list[i]);
 	if (!strcmp(rad_refname_relative(rrepo_files_list[i]),"refs/rad/sigrefs")) continue;
 	bool matches = false;
 	for (size_t j=0; j<n_sigref_entries; j++) {

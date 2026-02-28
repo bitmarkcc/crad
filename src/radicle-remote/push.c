@@ -245,6 +245,17 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
 	    git_reference_delete(tmpref);
 
+	// 7. Re-sign refs now that the patch head ref exists and staging ref is gone
+	Oid sigrefs_oid = rad_repo_sign_refs(rrepo,signer);
+	if (git_oid_is_zero(&sigrefs_oid)) {
+	    fprintf(stderr,"Failed to re-sign refs after patch creation\n");
+	    return 1;
+	}
+	if (create_sigrefs_commit(rrepo,signer,sigrefs_oid)) {
+	    fprintf(stderr,"Failed to create sigrefs commit after patch creation\n");
+	    return 1;
+	}
+
 	fprintf(stderr,"Patch %s opened\n",patch_id_str);
 	free(title);
 	free(desc);
