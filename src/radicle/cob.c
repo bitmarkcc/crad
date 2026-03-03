@@ -740,6 +740,81 @@ RepoEntry cob_patch_open (RadRepo rrepo, Pubkey signer, char* title, char* desc,
     return re;
 }
 
+RepoEntry update_cob_patch (RadRepo rrepo, char* message, PatchAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid patch_id) {
+    char buf [HEXSIZ];
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    // get first parent (latest entry for this patch)
+    const char* refname = 0;
+    Oid parent_oid = {{0}};
+    char glob [128];
+    sprintf(glob,"refs/namespaces/*/refs/cobs/xyz.radicle.patch/%s",git_oid_tostr(buf,HEXSIZ,&patch_id));
+    git_reference_iterator* refit = 0;
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
+	return re;
+    }
+    uint64_t latest_entry_time = 0;
+    int ret = 0;
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	Oid entry_id = {{0}};
+	if (git_reference_name_to_id(&entry_id,rrepo.repo,refname)) {
+	    eprintf("failed to get oid from reference name: %s",refname);
+	    return re;
+	}
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&entry_id)) {
+	    eprintf("failed to lookup git commit");
+	    return re;
+	}
+	git_time_t commit_time = git_commit_time(commit);
+	if (commit_time > latest_entry_time) {
+	    latest_entry_time = commit_time;
+	    parent_oid = entry_id;
+	}
+    }
+    if (git_oid_is_zero(&parent_oid)) {
+	eprintf("failed to find existing patch entry for update");
+	return re;
+    }
+    Oid parents [2] = {parent_oid,get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 2;
+    char** contents = patch_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.patch";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[n_parents-1];
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,patch_id);
+}
+
+RepoEntry cob_patch_update (RadRepo rrepo, Pubkey signer, Oid patch_id, char* desc, Oid base, Oid head) {
+    Oid zero = {{0}};
+    PatchTransaction tx = transaction_patch_default();
+    transaction_patch_add_revision(&tx,desc,base,head);
+    RepoEntry re = update_cob_patch(rrepo,"Add revision",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,patch_id);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to update patch failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
 int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo) {
     char buf [HEXSIZ];
     const char* type_name = cob_type_name(type);

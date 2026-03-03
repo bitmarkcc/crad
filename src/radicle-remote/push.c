@@ -256,6 +256,36 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	    return 1;
 	}
 
+	// 8. Create remote tracking branch and set upstream in working copy
+	//    refs/remotes/rad/patches/<patch-id> pointing at head
+	char remote_ref [128];
+	sprintf(remote_ref,"refs/remotes/rad/patches/%s",patch_id_str);
+	git_reference* remote_tracking_ref = 0;
+	if (git_reference_create(&remote_tracking_ref,repo,remote_ref,&head_oid,1,"Create remote tracking branch for patch")) {
+	    fprintf(stderr,"Warning: failed to create remote tracking branch\n");
+	}
+
+	// Set upstream for current branch: branch.<name>.remote = rad, branch.<name>.merge = refs/heads/patches/<id>
+	git_reference* head_ref = 0;
+	if (!git_repository_head(&head_ref,repo) && git_reference_is_branch(head_ref)) {
+	    const char* branch_name = 0;
+	    if (!git_branch_name(&branch_name,head_ref)) {
+		git_config* config = 0;
+		if (!git_repository_config(&config,repo)) {
+		    char* config_remote = malloc(strlen(branch_name)+24);
+		    char* config_merge = malloc(strlen(branch_name)+23);
+		    sprintf(config_remote,"branch.%s.remote",branch_name);
+		    sprintf(config_merge,"branch.%s.merge",branch_name);
+		    git_config_set_string(config,config_remote,"rad");
+		    char merge_ref [128];
+		    sprintf(merge_ref,"refs/heads/patches/%s",patch_id_str);
+		    git_config_set_string(config,config_merge,merge_ref);
+		    free(config_remote);
+		    free(config_merge);
+		}
+	    }
+	}
+
 	fprintf(stderr,"Patch %s opened\n",patch_id_str);
 	free(title);
 	free(desc);
@@ -263,8 +293,125 @@ int push_run (const char* refspec, Storage storage, RadRepo rrepo, const char* d
 	return 0;
     }
     else if (strlen(dst)>18 && !strcmp(rad_substr(dst,0,19),"refs/heads/patches/")) {
-	fprintf(stderr,"update a patch (to implement)\n");
-	return 1;
+	// Update an existing patch
+	const char* patch_id_str = dst+19;
+	Oid patch_id = {{0}};
+	if (git_oid_fromstr(&patch_id,patch_id_str)) {
+	    fprintf(stderr,"Failed to parse patch id from ref: %s\n",patch_id_str);
+	    return 1;
+	}
+
+	// 1. Push commit objects to storage via send-pack (temp ref)
+	char* tmp_ref = malloc(len_namespace_prefix+64);
+	sprintf(tmp_ref,"%srefs/heads/patches/staging",namespace_prefix);
+	char* tmp_refspec = malloc(strlen(src_full)+strlen(tmp_ref)+3);
+	sprintf(tmp_refspec,"+%s:%s",src_full,tmp_ref);
+	char* argv [7];
+	argv[0] = "git";
+	argv[1] = "-C";
+	argv[2] = strdup(repo_path);
+	argv[3] = "send-pack";
+	argv[4] = strdup(rrepo_path);
+	argv[5] = tmp_refspec;
+	argv[6] = 0;
+	if (exec_command("git",argv)) {
+	    fprintf(stderr,"git send-pack failed for patch update\n");
+	    return 1;
+	}
+
+	// 2. Compute merge base between canonical head and new patch head
+	Oid head_oid;
+	memcpy(&head_oid,git_object_id(obj),sizeof(Oid));
+	char canonical_ref [128];
+	sprintf(canonical_ref,"refs/heads/%s",default_branch);
+	Oid canonical_oid = {{0}};
+	if (git_reference_name_to_id(&canonical_oid,rrepo.repo,canonical_ref)) {
+	    fprintf(stderr,"Failed to resolve canonical head %s\n",canonical_ref);
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+	Oid base_oid = {{0}};
+	if (git_merge_base(&base_oid,rrepo.repo,&canonical_oid,&head_oid)) {
+	    fprintf(stderr,"Failed to compute merge base\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+
+	// 3. Extract description from the head commit message (body only)
+	git_commit* head_commit = 0;
+	if (git_commit_lookup(&head_commit,rrepo.repo,&head_oid)) {
+	    fprintf(stderr,"Failed to lookup head commit\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+	const char* commit_msg = git_commit_message(head_commit);
+	char* desc = 0;
+	if (commit_msg) {
+	    const char* nl = strchr(commit_msg,'\n');
+	    if (nl) {
+		nl++;
+		while (*nl == '\n' || *nl == '\r') nl++;
+		desc = strdup(nl);
+	    } else {
+		desc = strdup("");
+	    }
+	} else {
+	    desc = strdup("");
+	}
+
+	// 4. Update the patch COB with a new revision
+	Pubkey signer;
+	signer.bytes = raw_did_to_pubkey(did_raw);
+	RepoEntry re = cob_patch_update(rrepo,signer,patch_id,desc,base_oid,head_oid);
+	if (git_oid_is_zero(&re.oid)) {
+	    fprintf(stderr,"Failed to update patch COB\n");
+	    git_reference* tmpref = 0;
+	    if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+		git_reference_delete(tmpref);
+	    return 1;
+	}
+
+	// 5. Update the long-lived patch head reference
+	char patch_ref [128];
+	sprintf(patch_ref,"%s%s",namespace_prefix,dst);
+	git_reference* patch_head_ref = 0;
+	if (git_reference_create(&patch_head_ref,rrepo.repo,patch_ref,&head_oid,1,"Update reference for patch head")) {
+	    fprintf(stderr,"Failed to update patch head reference\n");
+	    return 1;
+	}
+
+	// 6. Delete the temp staging ref
+	git_reference* tmpref = 0;
+	if (!git_reference_lookup(&tmpref,rrepo.repo,tmp_ref))
+	    git_reference_delete(tmpref);
+
+	// 7. Re-sign refs
+	Oid sigrefs_oid = rad_repo_sign_refs(rrepo,signer);
+	if (git_oid_is_zero(&sigrefs_oid)) {
+	    fprintf(stderr,"Failed to re-sign refs after patch update\n");
+	    return 1;
+	}
+	if (create_sigrefs_commit(rrepo,signer,sigrefs_oid)) {
+	    fprintf(stderr,"Failed to create sigrefs commit after patch update\n");
+	    return 1;
+	}
+
+	// 8. Update the remote tracking branch in the working copy
+	char remote_ref [128];
+	sprintf(remote_ref,"refs/remotes/rad/patches/%s",patch_id_str);
+	git_reference* remote_tracking_ref = 0;
+	git_reference_create(&remote_tracking_ref,repo,remote_ref,&head_oid,1,"Update remote tracking branch for patch");
+
+	fprintf(stderr,"Patch %s updated\n",patch_id_str);
+	free(desc);
+	printf("ok %s\n\n",dst);
+	return 0;
     }
     else {
 	char* argv [7];

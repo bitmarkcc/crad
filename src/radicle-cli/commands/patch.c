@@ -10,6 +10,7 @@
 #include <rad.h>
 
 typedef struct {
+    Oid patch_id;
     char* title;
     char* description;
     Oid base;
@@ -19,28 +20,10 @@ typedef struct {
     int64_t timestamp;
 } PatchInfo;
 
-static int parse_patch_entry (PatchInfo* info, git_repository* repo, Oid entry_oid) {
-    git_commit* commit = 0;
-    if (git_commit_lookup(&commit,repo,&entry_oid)) {
-	eprintf("failed to lookup patch commit");
-	return 1;
-    }
-    info->timestamp = git_commit_time(commit);
-    const git_signature* author = git_commit_author(commit);
-    if (author && author->email) {
-	info->alias = strdup(rad_email_get_user(author->email));
-	char did [128];
-	sprintf(did,"did:key:%s",rad_email_get_domain(author->email));
-	info->author = strdup(did);
-    } else {
-	info->alias = strdup("unknown");
-	info->author = strdup("unknown");
-    }
+// Parse actions from a single COB entry commit tree
+static void parse_patch_tree (PatchInfo* info, git_repository* repo, git_commit* commit) {
     git_tree* tree = 0;
-    if (git_commit_tree(&tree,commit)) {
-	eprintf("failed to get tree from patch commit");
-	return 1;
-    }
+    if (git_commit_tree(&tree,commit)) return;
     for (size_t i=0; i<16; i++) {
 	char i_str [3];
 	sprintf(i_str,"%lu",i);
@@ -69,14 +52,78 @@ static int parse_patch_entry (PatchInfo* info, git_repository* repo, Oid entry_o
 		git_oid_fromstr(&info->head,json_object_get_string(val_oid));
 	    json_object* val_desc = 0;
 	    json_object_object_get_ex(content,"description",&val_desc);
+	    if (info->description) free(info->description);
 	    info->description = strdup(val_desc ? json_object_get_string(val_desc) : "");
 	}
 	else if (!strcmp(type,"edit")) {
 	    json_object* val_title = 0;
 	    json_object_object_get_ex(content,"title",&val_title);
+	    if (info->title) free(info->title);
 	    info->title = strdup(val_title ? json_object_get_string(val_title) : "Untitled");
 	}
     }
+}
+
+// Walk the COB commit chain from latest entry back to root.
+// Latest entry provides head/base (revision), root entry provides title (edit).
+// The root entry OID (commit with < 2 parents) is the stable patch ID.
+static int parse_patch_entry (PatchInfo* info, git_repository* repo, Oid entry_oid) {
+    // Collect all entries in the chain (latest first)
+    size_t entries_capacity = 8;
+    Oid* entries = malloc(entries_capacity*sizeof(Oid));
+    size_t n_entries = 0;
+    Oid cur = entry_oid;
+
+    while (1) {
+	if (n_entries >= entries_capacity) {
+	    entries_capacity *= 2;
+	    entries = realloc(entries,entries_capacity*sizeof(Oid));
+	}
+	entries[n_entries++] = cur;
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,repo,&cur)) {
+	    eprintf("failed to lookup patch commit");
+	    free(entries);
+	    return 1;
+	}
+	unsigned int parent_count = git_commit_parentcount(commit);
+	if (parent_count < 2) {
+	    // This is the root entry (create commit)
+	    info->patch_id = cur;
+	    break;
+	}
+	// First parent is the previous entry in the COB chain
+	const Oid* parent = git_commit_parent_id(commit,0);
+	if (!parent) break;
+	cur = *parent;
+    }
+
+    // Apply entries from oldest to newest so latest revision overwrites earlier ones
+    for (int i=n_entries-1; i>=0; i--) {
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,repo,&entries[i])) {
+	    eprintf("failed to lookup patch commit");
+	    free(entries);
+	    return 1;
+	}
+	// Get author and timestamp from the root (create) entry
+	if (i == (int)n_entries-1) {
+	    info->timestamp = git_commit_time(commit);
+	    const git_signature* author = git_commit_author(commit);
+	    if (author && author->email) {
+		info->alias = strdup(rad_email_get_user(author->email));
+		char did [128];
+		sprintf(did,"did:key:%s",rad_email_get_domain(author->email));
+		info->author = strdup(did);
+	    } else {
+		info->alias = strdup("unknown");
+		info->author = strdup("unknown");
+	    }
+	}
+	parse_patch_tree(info,repo,commit);
+    }
+
+    free(entries);
     if (!info->title) info->title = strdup("Untitled");
     if (!info->description) info->description = strdup("");
     return 0;
@@ -170,8 +217,8 @@ int patch_list (const char* rid) {
 	    eprintf("failed to parse patch entry");
 	    return 1;
 	}
-	// ID (7 chars)
-	char* patch_id_str = git_oid_tostr(buf,HEXSIZ,&patch_entry);
+	// ID (7 chars, root patch ID)
+	char* patch_id_str = git_oid_tostr(buf,HEXSIZ,&info.patch_id);
 	char id [8];
 	memcpy(id,patch_id_str,7);
 	id[7] = 0;
@@ -179,12 +226,12 @@ int patch_list (const char* rid) {
 
 	// Title (20 chars)
 	char* title = info.title;
-	if (strlen(title) > 20)
-	    title[20] = 0;
+	if (strlen(title) > 23)
+	    title[23] = 0;
 	rad_replace(title,' ','_');
 	printf("%s",title);
 	size_t title_len = strlen(title);
-	for (size_t j=0; j<21-title_len; j++)
+	for (size_t j=0; j<24-title_len; j++)
 	    printf(" ");
 
 	// Author (12 chars, DID suffix)
@@ -208,11 +255,39 @@ int patch_list (const char* rid) {
     return 0;
 }
 
+// Find the latest COB entry for a given root patch ID
+static int find_latest_patch_entry (Oid* latest, git_repository* repo, Oid patch_id) {
+    char buf [HEXSIZ];
+    char glob [128];
+    sprintf(glob,"refs/namespaces/*/refs/cobs/xyz.radicle.patch/%s",git_oid_tostr(buf,HEXSIZ,&patch_id));
+    git_reference_iterator* refit = 0;
+    if (git_reference_iterator_glob_new(&refit,repo,glob)) {
+	eprintf("failed to create glob iterator for patch");
+	return 1;
+    }
+    const char* refname = 0;
+    int ret = 0;
+    uint64_t latest_time = 0;
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	Oid entry_id = {{0}};
+	if (git_reference_name_to_id(&entry_id,repo,refname)) continue;
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,repo,&entry_id)) continue;
+	git_time_t t = git_commit_time(commit);
+	if (t > latest_time) {
+	    latest_time = t;
+	    *latest = entry_id;
+	}
+    }
+    return git_oid_is_zero(latest) ? 1 : 0;
+}
+
 int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json) {
     char buf [HEXSIZ];
     RadRepo rrepo;
     if (open_rrepo(&rrepo,rid)) return 1;
 
+    // Resolve prefix to full OID
     git_odb* odb = 0;
     if (git_repository_odb(&odb,rrepo.repo)) {
 	eprintf("failed to get repository odb");
@@ -225,8 +300,15 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
     }
     patch_id = *git_odb_object_id(odb_obj);
 
+    // Find the latest entry for this patch (may differ from root after updates)
+    Oid latest_entry = {{0}};
+    if (find_latest_patch_entry(&latest_entry,rrepo.repo,patch_id)) {
+	eprintf("failed to find patch entry in storage");
+	return 1;
+    }
+
     PatchInfo info = {0};
-    if (parse_patch_entry(&info,rrepo.repo,patch_id)) {
+    if (parse_patch_entry(&info,rrepo.repo,latest_entry)) {
 	eprintf("failed to parse patch entry");
 	return 1;
     }
@@ -234,7 +316,7 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
     if (json) {
 	json_object* obj = json_object_new_object();
 	json_object_object_add(obj,"title",json_object_new_string(info.title));
-	json_object_object_add(obj,"patch",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&patch_id)));
+	json_object_object_add(obj,"patch",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&info.patch_id)));
 	json_object_object_add(obj,"author",json_object_new_string(info.author));
 	json_object_object_add(obj,"alias",json_object_new_string(info.alias));
 	json_object_object_add(obj,"head",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&info.head)));
@@ -246,7 +328,7 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
     }
     else {
 	printf("Title   %s\n",info.title);
-	printf("Patch   %s\n",git_oid_tostr(buf,HEXSIZ,&patch_id));
+	printf("Patch   %s\n",git_oid_tostr(buf,HEXSIZ,&info.patch_id));
 	printf("Author  %s %s\n",info.alias,info.author);
 	printf("Head    %s\n",git_oid_tostr(buf,HEXSIZ,&info.head));
 	printf("Base    %s\n",git_oid_tostr(buf,HEXSIZ,&info.base));
