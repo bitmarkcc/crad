@@ -118,6 +118,8 @@ int node_run () {
     sprintf(line,"AuthorizedKeysFile %s/.ssh/authorized_keys\n",rad_home);
     fputs(line,f_sshd);
     sprintf(line,"PidFile %s/.ssh/sshd.pid\n",rad_home);
+    fputs(line,f_sshd);
+    fputs("StrictModes no\n",f_sshd);
     fputs("PasswordAuthentication no\n",f_sshd);
     fputs("PubkeyAuthentication yes\n",f_sshd);
     //fputs("KexAlgorithms +ecdh-sha2-secp256k1\n",f_sshd);
