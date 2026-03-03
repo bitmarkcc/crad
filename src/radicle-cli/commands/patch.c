@@ -144,6 +144,11 @@ void print_help_patch () {
     printf("crad patch (Manage patches) Usage:\n");
     printf("crad patch list [-R <rid>]\n");
     printf("crad patch show <patch-id> [-R <rid>] [--json]\n");
+    printf("crad patch diff <patch-id> [-R <rid>]\n");
+    printf("crad patch delete <patch-id> [-R <rid>]\n");
+    printf("crad patch assign <patch-id> --add <did>... --delete <did>... [-R <rid>]\n");
+    printf("crad patch label <patch-id> --add <label>... --delete <label>... [-R <rid>]\n");
+    printf("crad patch ready <patch-id> [--undo] [-R <rid>]\n");
 }
 
 PatchCommand parse_args_patch (int argc, char** argv) {
@@ -339,6 +344,140 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
     return 0;
 }
 
+static int diff_print_cb (const git_diff_delta* delta, const git_diff_hunk* hunk, const git_diff_line* line, void* payload) {
+    (void)delta; (void)hunk;
+    FILE* fp = (FILE*)payload;
+    if (line->origin == GIT_DIFF_LINE_ADDITION || line->origin == GIT_DIFF_LINE_DELETION || line->origin == GIT_DIFF_LINE_CONTEXT)
+	fputc(line->origin,fp);
+    fwrite(line->content,1,line->content_len,fp);
+    return 0;
+}
+
+// Resolve a patch ID prefix and find latest entry
+static int resolve_patch (RadRepo* rrepo, Oid* patch_id, size_t patch_id_hexlen, PatchInfo* info, const char* rid) {
+    if (open_rrepo(rrepo,rid)) return 1;
+    git_odb* odb = 0;
+    if (git_repository_odb(&odb,rrepo->repo)) {
+	eprintf("failed to get repository odb");
+	return 1;
+    }
+    git_odb_object* odb_obj = 0;
+    if (git_odb_read_prefix(&odb_obj,odb,patch_id,patch_id_hexlen)) {
+	eprintf("failed to find patch with given id prefix");
+	return 1;
+    }
+    *patch_id = *git_odb_object_id(odb_obj);
+    if (info) {
+	Oid latest_entry = {{0}};
+	if (find_latest_patch_entry(&latest_entry,rrepo->repo,*patch_id)) {
+	    eprintf("failed to find patch entry in storage");
+	    return 1;
+	}
+	memset(info,0,sizeof(PatchInfo));
+	if (parse_patch_entry(info,rrepo->repo,latest_entry)) {
+	    eprintf("failed to parse patch entry");
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+int patch_diff (Oid patch_id, size_t patch_id_hexlen, const char* rid) {
+    RadRepo rrepo;
+    PatchInfo info;
+    if (resolve_patch(&rrepo,&patch_id,patch_id_hexlen,&info,rid)) return 1;
+
+    // Get the trees for base and head commits
+    git_commit* base_commit = 0;
+    git_commit* head_commit = 0;
+    if (git_commit_lookup(&base_commit,rrepo.repo,&info.base)) {
+	eprintf("failed to lookup base commit");
+	return 1;
+    }
+    if (git_commit_lookup(&head_commit,rrepo.repo,&info.head)) {
+	eprintf("failed to lookup head commit");
+	return 1;
+    }
+    git_tree* base_tree = 0;
+    git_tree* head_tree = 0;
+    if (git_commit_tree(&base_tree,base_commit)) {
+	eprintf("failed to get base tree");
+	return 1;
+    }
+    if (git_commit_tree(&head_tree,head_commit)) {
+	eprintf("failed to get head tree");
+	return 1;
+    }
+    git_diff* diff = 0;
+    if (git_diff_tree_to_tree(&diff,rrepo.repo,base_tree,head_tree,0)) {
+	eprintf("failed to compute diff");
+	return 1;
+    }
+    if (git_diff_print(diff,GIT_DIFF_FORMAT_PATCH,diff_print_cb,stdout)) {
+	eprintf("failed to print diff");
+	return 1;
+    }
+    return 0;
+}
+
+int patch_delete (Oid patch_id, size_t patch_id_hexlen, const char* rid) {
+    char buf [HEXSIZ];
+    RadRepo rrepo;
+    if (resolve_patch(&rrepo,&patch_id,patch_id_hexlen,0,rid)) return 1;
+    Pubkey signer = profile_get_pubkey();
+    if (cob_patch_delete(rrepo,signer,patch_id)) {
+	eprintf("failed to delete patch");
+	return 1;
+    }
+    printf("Patch %s deleted\n",git_oid_tostr(buf,HEXSIZ,&patch_id));
+    return 0;
+}
+
+int patch_assign (Oid patch_id, size_t patch_id_hexlen, SimpleSet* add, SimpleSet* delete, const char* rid) {
+    char buf [HEXSIZ];
+    RadRepo rrepo;
+    if (resolve_patch(&rrepo,&patch_id,patch_id_hexlen,0,rid)) return 1;
+    Pubkey signer = profile_get_pubkey();
+    // Merge add and delete into final assignee set
+    // For simplicity: set the assignees to whatever is in 'add' (Heartwood replaces the full set)
+    RepoEntry re = cob_patch_assign(rrepo,signer,patch_id,add);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to assign patch");
+	return 1;
+    }
+    printf("Patch %s updated\n",git_oid_tostr(buf,HEXSIZ,&patch_id));
+    return 0;
+}
+
+int patch_label (Oid patch_id, size_t patch_id_hexlen, SimpleSet* add, SimpleSet* delete, const char* rid) {
+    char buf [HEXSIZ];
+    RadRepo rrepo;
+    if (resolve_patch(&rrepo,&patch_id,patch_id_hexlen,0,rid)) return 1;
+    Pubkey signer = profile_get_pubkey();
+    RepoEntry re = cob_patch_label(rrepo,signer,patch_id,add);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to label patch");
+	return 1;
+    }
+    printf("Patch %s updated\n",git_oid_tostr(buf,HEXSIZ,&patch_id));
+    return 0;
+}
+
+int patch_ready (Oid patch_id, size_t patch_id_hexlen, bool undo, const char* rid) {
+    char buf [HEXSIZ];
+    RadRepo rrepo;
+    if (resolve_patch(&rrepo,&patch_id,patch_id_hexlen,0,rid)) return 1;
+    Pubkey signer = profile_get_pubkey();
+    char* state = undo ? "draft" : "open";
+    RepoEntry re = cob_patch_lifecycle(rrepo,signer,patch_id,state);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("failed to change patch lifecycle");
+	return 1;
+    }
+    printf("Patch %s is now %s\n",git_oid_tostr(buf,HEXSIZ,&patch_id),state);
+    return 0;
+}
+
 int patch_run (Command c) {
     if (c.type == CMD_HELP) {
 	print_help_patch();
@@ -367,6 +506,94 @@ int patch_run (Command c) {
 	PatchCommand cmd = parse_args_patch(c.argc,c.argv);
 	if (cmd.err) return 1;
 	return patch_show(patch_id,patch_id_hexlen,cmd.rid,cmd.json);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"diff")) {
+	Oid patch_id = {{0}};
+	if (git_oid_fromstrp(&patch_id,c.argv[1])) {
+	    eprintf("failed to parse patch id");
+	    return 1;
+	}
+	size_t patch_id_hexlen = strlen(c.argv[1]);
+	PatchCommand cmd = parse_args_patch(c.argc,c.argv);
+	if (cmd.err) return 1;
+	return patch_diff(patch_id,patch_id_hexlen,cmd.rid);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"delete")) {
+	Oid patch_id = {{0}};
+	if (git_oid_fromstrp(&patch_id,c.argv[1])) {
+	    eprintf("failed to parse patch id");
+	    return 1;
+	}
+	size_t patch_id_hexlen = strlen(c.argv[1]);
+	PatchCommand cmd = parse_args_patch(c.argc,c.argv);
+	if (cmd.err) return 1;
+	return patch_delete(patch_id,patch_id_hexlen,cmd.rid);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"assign")) {
+	Oid patch_id = {{0}};
+	if (git_oid_fromstrp(&patch_id,c.argv[1])) {
+	    eprintf("failed to parse patch id");
+	    return 1;
+	}
+	size_t patch_id_hexlen = strlen(c.argv[1]);
+	// Parse --add and --delete args
+	SimpleSet add, del;
+	set_init(&add);
+	set_init(&del);
+	bool adding = false, deleting = false;
+	const char* rid = 0;
+	for (int i=2; i<c.argc; i++) {
+	    if (!strcmp(c.argv[i],"--add")) { adding = true; deleting = false; }
+	    else if (!strcmp(c.argv[i],"--delete")) { deleting = true; adding = false; }
+	    else if (!strcmp(c.argv[i],"-R")) {
+		if (i+1 < c.argc) { rid = c.argv[++i]; }
+	    }
+	    else if (adding) set_add_str(&add,c.argv[i]);
+	    else if (deleting) set_add_str(&del,c.argv[i]);
+	    else set_add_str(&add,c.argv[i]); // default to add
+	}
+	return patch_assign(patch_id,patch_id_hexlen,&add,&del,rid);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"label")) {
+	Oid patch_id = {{0}};
+	if (git_oid_fromstrp(&patch_id,c.argv[1])) {
+	    eprintf("failed to parse patch id");
+	    return 1;
+	}
+	size_t patch_id_hexlen = strlen(c.argv[1]);
+	SimpleSet add, del;
+	set_init(&add);
+	set_init(&del);
+	bool adding = false, deleting = false;
+	const char* rid = 0;
+	for (int i=2; i<c.argc; i++) {
+	    if (!strcmp(c.argv[i],"--add")) { adding = true; deleting = false; }
+	    else if (!strcmp(c.argv[i],"--delete")) { deleting = true; adding = false; }
+	    else if (!strcmp(c.argv[i],"-R")) {
+		if (i+1 < c.argc) { rid = c.argv[++i]; }
+	    }
+	    else if (adding) set_add_str(&add,c.argv[i]);
+	    else if (deleting) set_add_str(&del,c.argv[i]);
+	    else set_add_str(&add,c.argv[i]);
+	}
+	return patch_label(patch_id,patch_id_hexlen,&add,&del,rid);
+    }
+    else if (c.argc > 1 && !strcmp(c.argv[0],"ready")) {
+	Oid patch_id = {{0}};
+	if (git_oid_fromstrp(&patch_id,c.argv[1])) {
+	    eprintf("failed to parse patch id");
+	    return 1;
+	}
+	size_t patch_id_hexlen = strlen(c.argv[1]);
+	bool undo = false;
+	const char* rid = 0;
+	for (int i=2; i<c.argc; i++) {
+	    if (!strcmp(c.argv[i],"--undo")) undo = true;
+	    else if (!strcmp(c.argv[i],"-R")) {
+		if (i+1 < c.argc) { rid = c.argv[++i]; }
+	    }
+	}
+	return patch_ready(patch_id,patch_id_hexlen,undo,rid);
     }
     else {
 	print_help_patch();

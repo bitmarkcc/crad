@@ -21,5 +21,8 @@ PatchAction action_patch_default () {
     a.oid = zero;
     a.title = 0;
     a.target = 0;
+    a.assignees = 0;
+    a.labels = 0;
+    a.state = 0;
     return a;
 }

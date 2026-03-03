@@ -676,6 +676,34 @@ char** patch_actions_to_json_strings (const PatchAction* actions, size_t n) {
 	    json_object_object_add(obj,"title",json_object_new_string(action.title ? action.title : ""));
 	    json_object_object_add(obj,"type",json_object_new_string("edit"));
 	}
+	else if (action.type == PATCH_ACTION_ASSIGN) {
+	    json_object* arr = json_object_new_array();
+	    if (action.assignees) {
+		size_t n = 0;
+		char** list = set_to_array(action.assignees,&n);
+		for (size_t j=0; j<n; j++)
+		    json_object_array_add(arr,json_object_new_string(list[j]));
+	    }
+	    json_object_object_add(obj,"assignees",arr);
+	    json_object_object_add(obj,"type",json_object_new_string("assign"));
+	}
+	else if (action.type == PATCH_ACTION_LABEL) {
+	    json_object* arr = json_object_new_array();
+	    if (action.labels) {
+		size_t n = 0;
+		char** list = set_to_array(action.labels,&n);
+		for (size_t j=0; j<n; j++)
+		    json_object_array_add(arr,json_object_new_string(list[j]));
+	    }
+	    json_object_object_add(obj,"labels",arr);
+	    json_object_object_add(obj,"type",json_object_new_string("label"));
+	}
+	else if (action.type == PATCH_ACTION_LIFECYCLE) {
+	    json_object* obj_state = json_object_new_object();
+	    json_object_object_add(obj_state,"status",json_object_new_string(action.state ? action.state : "open"));
+	    json_object_object_add(obj,"state",obj_state);
+	    json_object_object_add(obj,"type",json_object_new_string("lifecycle"));
+	}
 	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
     }
     return jsons;
@@ -696,6 +724,30 @@ int transaction_patch_add_edit (PatchTransaction* tx, char* title, char* target)
     action.type = PATCH_ACTION_EDIT;
     action.title = title;
     action.target = target ? target : "delegates";
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+int transaction_patch_add_assign (PatchTransaction* tx, SimpleSet* assignees) {
+    PatchAction action = action_patch_default();
+    action.type = PATCH_ACTION_ASSIGN;
+    action.assignees = assignees;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+int transaction_patch_add_label (PatchTransaction* tx, SimpleSet* labels) {
+    PatchAction action = action_patch_default();
+    action.type = PATCH_ACTION_LABEL;
+    action.labels = labels;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+int transaction_patch_add_lifecycle (PatchTransaction* tx, char* state) {
+    PatchAction action = action_patch_default();
+    action.type = PATCH_ACTION_LIFECYCLE;
+    action.state = state;
     rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
     return 0;
 }
@@ -813,6 +865,95 @@ RepoEntry cob_patch_update (RadRepo rrepo, Pubkey signer, Oid patch_id, char* de
 	re.oid = zero;
     }
     return re;
+}
+
+RepoEntry cob_patch_assign (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSet* assignees) {
+    Oid zero = {{0}};
+    PatchTransaction tx = transaction_patch_default();
+    transaction_patch_add_assign(&tx,assignees);
+    RepoEntry re = update_cob_patch(rrepo,"Assign",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,patch_id);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to assign patch failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+RepoEntry cob_patch_label (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSet* labels) {
+    Oid zero = {{0}};
+    PatchTransaction tx = transaction_patch_default();
+    transaction_patch_add_label(&tx,labels);
+    RepoEntry re = update_cob_patch(rrepo,"Label",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,patch_id);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to label patch failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+RepoEntry cob_patch_lifecycle (RadRepo rrepo, Pubkey signer, Oid patch_id, char* state) {
+    Oid zero = {{0}};
+    PatchTransaction tx = transaction_patch_default();
+    transaction_patch_add_lifecycle(&tx,state);
+    RepoEntry re = update_cob_patch(rrepo,"Lifecycle",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,patch_id);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to change patch lifecycle failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+int cob_patch_delete (RadRepo rrepo, Pubkey signer, Oid patch_id) {
+    char refname [256];
+    char buf [HEXSIZ];
+    char* patch_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&patch_id));
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    // Remove COB ref
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.patch/%s",did_raw,patch_id_str);
+    if (git_reference_remove(rrepo.repo,refname)) {
+	eprintf("failed to remove git reference %s",refname);
+    }
+    // Remove patch head ref
+    sprintf(refname,"refs/namespaces/%s/refs/heads/patches/%s",did_raw,patch_id_str);
+    git_reference_remove(rrepo.repo,refname); // may not exist, ignore error
+    free(patch_id_str);
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
+	return 1;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	return 1;
+    }
+    return 0;
 }
 
 int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo) {

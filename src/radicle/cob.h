@@ -19,6 +19,10 @@ int cob_issue_delete (RadRepo rrepo, Pubkey signer, Oid issue_id);
 RepoEntry cob_issue_edit (RadRepo rrepo, Pubkey signer, Oid issue_id, char* title, char* desc);
 RepoEntry cob_patch_open (RadRepo rrepo, Pubkey signer, char* title, char* desc, Oid base, Oid head);
 RepoEntry cob_patch_update (RadRepo rrepo, Pubkey signer, Oid patch_id, char* desc, Oid base, Oid head);
+RepoEntry cob_patch_assign (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSet* assignees);
+RepoEntry cob_patch_label (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSet* labels);
+RepoEntry cob_patch_lifecycle (RadRepo rrepo, Pubkey signer, Oid patch_id, char* state);
+int cob_patch_delete (RadRepo rrepo, Pubkey signer, Oid patch_id);
 int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo);
 
 #endif
