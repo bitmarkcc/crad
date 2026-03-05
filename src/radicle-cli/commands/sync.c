@@ -181,9 +181,9 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	Pubkey signer = profile_get_pubkey();
 	const char* namespace_me = pubkey_to_did(signer.bytes)+8;
 	
-	char* namespaces_src = malloc(strlen(dsttmp)+128);
+	char* namespaces_src = malloc(strlen(dsttmp)+32);
 	sprintf(namespaces_src,"%srefs/namespaces",dsttmp);
-	char* namespaces_dst = malloc(strlen(dst));
+	char* namespaces_dst = malloc(strlen(dst)+32);
 	sprintf(namespaces_dst,"%srefs/namespaces",dst);
 	if (!access(namespaces_src,F_OK) && !access(namespaces_dst,F_OK)) {
 	    DIR* d = opendir(namespaces_src);
