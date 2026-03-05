@@ -328,13 +328,49 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	    }*/
 
 	if (strlen(cwd)) {
-	    // pull from radrepo
+	    // Update remote tracking branches for patches from storage
+	    char patch_glob [128];
+	    sprintf(patch_glob,"refs/namespaces/%s/refs/heads/patches/*",namespace_me);
+	    git_reference_iterator* patch_it = 0;
+	    if (!git_reference_iterator_glob_new(&patch_it,repo_dst,patch_glob)) {
+		const char* patch_refname = 0;
+		while (!git_reference_next_name(&patch_refname,patch_it)) {
+		    // Extract patch ID from refs/namespaces/<nid>/refs/heads/patches/<id>
+		    const char* patch_id_str = strrchr(patch_refname,'/');
+		    if (!patch_id_str) continue;
+		    patch_id_str++;
+		    Oid patch_head = {{0}};
+		    if (git_reference_name_to_id(&patch_head,repo_dst,patch_refname)) continue;
+		    // Create refs/remotes/rad/patches/<id> in working copy
+		    char remote_ref [128];
+		    sprintf(remote_ref,"refs/remotes/rad/patches/%s",patch_id_str);
+		    git_reference* tracking_ref = 0;
+		    git_reference_create(&tracking_ref,repo,remote_ref,&patch_head,1,"sync patch tracking branch");
+		}
+		git_reference_iterator_free(patch_it);
+	    }
+
+	    // Get default branch name from storage repo HEAD
+	    git_reference* head_ref_dst = 0;
+	    const char* default_branch = "main";
+	    if (!git_reference_lookup(&head_ref_dst,repo_dst,"HEAD")) {
+		git_reference* resolved = 0;
+		if (!git_reference_resolve(&resolved,head_ref_dst)) {
+		    const char* refname = git_reference_name(resolved);
+		    if (refname && !strncmp(refname,"refs/heads/",11))
+			default_branch = refname + 11;
+		}
+	    }
+
+	    // pull from radrepo (explicit branch to avoid patch upstream issues)
 	    argv[0] = "git";
 	    argv[1] = "-C";
 	    argv[2] = strdup(cwd);
 	    argv[3] = "pull";
-	    argv[4] = 0;
-	    //iprintf("exec: %s -- %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3],argv[4]);
+	    argv[4] = "rad";
+	    argv[5] = strdup(default_branch);
+	    argv[6] = 0;
+	    //iprintf("exec: %s -- %s -- %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3],argv[4],argv[5]);
 	    if (exec_command("git",argv)) {
 		eprintf("git command failed");
 		return 1;
