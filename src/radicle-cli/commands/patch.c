@@ -18,6 +18,9 @@ typedef struct {
     char* author;
     char* alias;
     int64_t timestamp;
+    char* state; // "open", "draft", "archived"
+    SimpleSet labels;
+    SimpleSet assignees;
 } PatchInfo;
 
 // Parse actions from a single COB entry commit tree
@@ -60,6 +63,38 @@ static void parse_patch_tree (PatchInfo* info, git_repository* repo, git_commit*
 	    json_object_object_get_ex(content,"title",&val_title);
 	    if (info->title) free(info->title);
 	    info->title = strdup(val_title ? json_object_get_string(val_title) : "Untitled");
+	}
+	else if (!strcmp(type,"assign")) {
+	    json_object* val_assignees = 0;
+	    json_object_object_get_ex(content,"assignees",&val_assignees);
+	    if (val_assignees) {
+		set_init(&info->assignees);
+		size_t n = json_object_array_length(val_assignees);
+		for (size_t j=0; j<n; j++)
+		    set_add_str(&info->assignees,json_object_get_string(json_object_array_get_idx(val_assignees,j)));
+	    }
+	}
+	else if (!strcmp(type,"label")) {
+	    json_object* val_labels = 0;
+	    json_object_object_get_ex(content,"labels",&val_labels);
+	    if (val_labels) {
+		set_init(&info->labels);
+		size_t n = json_object_array_length(val_labels);
+		for (size_t j=0; j<n; j++)
+		    set_add_str(&info->labels,json_object_get_string(json_object_array_get_idx(val_labels,j)));
+	    }
+	}
+	else if (!strcmp(type,"lifecycle")) {
+	    json_object* val_state = 0;
+	    json_object_object_get_ex(content,"state",&val_state);
+	    if (val_state) {
+		json_object* val_status = 0;
+		json_object_object_get_ex(val_state,"status",&val_status);
+		if (val_status) {
+		    if (info->state) free(info->state);
+		    info->state = strdup(json_object_get_string(val_status));
+		}
+	    }
 	}
     }
 }
@@ -318,6 +353,12 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
 	return 1;
     }
 
+    const char* status = info.state ? info.state : "open";
+    size_t n_labels = 0;
+    char** labels_list = set_to_array(&info.labels,&n_labels);
+    size_t n_assigned = 0;
+    char** assigned_list = set_to_array(&info.assignees,&n_assigned);
+
     if (json) {
 	json_object* obj = json_object_new_object();
 	json_object_object_add(obj,"title",json_object_new_string(info.title));
@@ -326,9 +367,21 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
 	json_object_object_add(obj,"alias",json_object_new_string(info.alias));
 	json_object_object_add(obj,"head",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&info.head)));
 	json_object_object_add(obj,"base",json_object_new_string(git_oid_tostr(buf,HEXSIZ,&info.base)));
-	json_object_object_add(obj,"status",json_object_new_string("open"));
+	json_object_object_add(obj,"status",json_object_new_string(status));
 	json_object_object_add(obj,"description",json_object_new_string(info.description));
 	json_object_object_add(obj,"timestamp",json_object_new_int64(info.timestamp));
+	if (n_labels) {
+	    json_object* labels_arr = json_object_new_array();
+	    for (size_t i=0; i<n_labels; i++)
+		json_object_array_add(labels_arr,json_object_new_string(labels_list[i]));
+	    json_object_object_add(obj,"labels",labels_arr);
+	}
+	if (n_assigned) {
+	    json_object* assigned_arr = json_object_new_array();
+	    for (size_t i=0; i<n_assigned; i++)
+		json_object_array_add(assigned_arr,json_object_new_string(assigned_list[i]));
+	    json_object_object_add(obj,"assignees",assigned_arr);
+	}
 	printf("%s\n",json_object_to_json_string(obj));
     }
     else {
@@ -337,7 +390,23 @@ int patch_show (Oid patch_id, size_t patch_id_hexlen, const char* rid, bool json
 	printf("Author  %s %s\n",info.alias,info.author);
 	printf("Head    %s\n",git_oid_tostr(buf,HEXSIZ,&info.head));
 	printf("Base    %s\n",git_oid_tostr(buf,HEXSIZ,&info.base));
-	printf("Status  open\n");
+	printf("Status  %s\n",status);
+	if (n_labels) {
+	    printf("Labels  ");
+	    for (size_t i=0; i<n_labels; i++) {
+		printf("%s",labels_list[i]);
+		if (i<n_labels-1) printf(",");
+	    }
+	    printf("\n");
+	}
+	if (n_assigned) {
+	    printf("Assign  ");
+	    for (size_t i=0; i<n_assigned; i++) {
+		printf("%s",assigned_list[i]);
+		if (i<n_assigned-1) printf(",");
+	    }
+	    printf("\n");
+	}
 	if (info.description && strlen(info.description))
 	    printf("\n%s\n",info.description);
     }
