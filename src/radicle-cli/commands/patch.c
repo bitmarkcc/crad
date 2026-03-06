@@ -241,7 +241,7 @@ int patch_list (const char* rid) {
     size_t n_patches = 0;
     char** patches_list = set_to_array(&patches,&n_patches);
     if (n_patches)
-	printf("ID------Title-------------------Author-------Head----Opened\n");
+	printf("ID------Title-------------------Author-------Alias--------Head----Opened\n");
     for (size_t i=0; i<n_patches; i++) {
 	Oid patch_entry = {{0}};
 	if (git_oid_fromstr(&patch_entry,patches_list[i])) {
@@ -279,6 +279,16 @@ int patch_list (const char* rid) {
 	if (strlen(author) > 12)
 	    author[12] = 0;
 	printf("%s ",author);
+
+	// Alias (12 chars)
+	char* alias = info.alias ? info.alias : "_";
+	if (strlen(alias) > 12)
+	    alias[12] = 0;
+	rad_replace(alias,' ','_');
+	printf("%s",alias);
+	size_t alias_len = strlen(alias);
+	for (size_t j=0; j<13-alias_len; j++)
+	    printf(" ");
 
 	// Head (7 chars)
 	char head_str [8];

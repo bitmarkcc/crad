@@ -45,7 +45,8 @@ CLI_SRC = src/radicle-cli/main.c \
           src/radicle-cli/commands/sync.c \
           src/radicle-cli/commands/ls.c \
           src/radicle-cli/commands/patch.c \
-          src/radicle-cli/commands/inspect.c
+          src/radicle-cli/commands/inspect.c \
+          src/radicle-cli/commands/source.c
 
 CLI_OBJ = $(patsubst src/radicle-cli/%.c,$(BUILDDIR)/cli/%.o,$(CLI_SRC))
 CLI_OUT = $(BUILDDIR)/crad
