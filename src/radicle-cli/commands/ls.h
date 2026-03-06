@@ -7,6 +7,7 @@ typedef struct {
     char err;
     bool public;
     bool private;
+    bool json;
 } LsCommand;
 
 int ls_run (Command c);

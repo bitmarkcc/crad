@@ -10,18 +10,20 @@
 #include <git.h>
 #include <cob.h>
 #include <rad.h>
+#include <json-c/json.h>
 
 LsCommand command_ls_default () {
     LsCommand cmd;
     cmd.err = 0;
     cmd.public = false;
     cmd.private = false;
+    cmd.json = false;
     return cmd;
 }
 
 void print_help_ls () {
     printf("crad ls (List repositories) Usage:\n");
-    printf("crad ls [--public] [--private]\n");
+    printf("crad ls [--public] [--private] [--json]\n");
 }
 
 LsCommand parse_args_ls (int argc, char** argv) {
@@ -32,6 +34,9 @@ LsCommand parse_args_ls (int argc, char** argv) {
 	}
 	else if (!strcmp(argv[i],"--private")) {
 	    cmd.private = true;
+	}
+	else if (!strcmp(argv[i],"--json")) {
+	    cmd.json = true;
 	}
     }
     return cmd;
@@ -51,6 +56,7 @@ int ls_run (Command c) {
 	if (cmd.err) {
 	    return 1;
 	}
+	bool use_json = cmd.json || c.json;
 	char buf [HEXSIZ];
 	Storage s = profile_get_storage();
 	DIR* d = opendir(s.path);
@@ -61,12 +67,14 @@ int ls_run (Command c) {
 	}
 	rad_git_init();
 	bool have_dir = false;
+	json_object* arr = use_json ? json_object_new_array() : 0;
 	while (dir = readdir(d)) {
 	    if (strlen(dir->d_name)>2 && strlen(dir->d_name)<32) { // todo handle edge cases
-		if (!have_dir) {
+		if (!have_dir && !use_json) {
 		    printf("Name-------------RID---------------------------Visibility-Head----Description\n");
 		    have_dir = true;
 		}
+		have_dir = true;
 		char* repo_path = malloc(strlen(s.path)+64);
 		sprintf(repo_path,"%s/%s",s.path,dir->d_name);
 		git_repository* repo = 0;
@@ -90,7 +98,7 @@ int ls_run (Command c) {
 
 		if (cmd.private && visibility != VIS_PRIVATE)
 		    continue;
-		
+
 		json_object* payload_val = payload.values[0];
 		json_object* name_val = 0;
 		json_object* desc_val = 0;
@@ -105,40 +113,53 @@ int ls_run (Command c) {
 		    return 1;
 		}
 		git_oid_tostr(buf,HEXSIZ,&head_id);
-		buf[7] = 0;
-		
-		char* name = strdup(name_str);
-		if (strlen(name)>16)
-		    name[16] = 0;
-		rad_replace(name,' ','_');
-		printf("%s",name);
-		size_t name_len = strlen(name);
-		for (size_t j=0; j<17-name_len; j++)
-		    printf(" ");
-		printf("%s ",dir->d_name);
-		size_t rid_len = strlen(dir->d_name);
-		for (size_t j=0; j<29-rid_len; j++)
-		    printf(" ");
-		
-		char* visibility_str = visibility_to_str(visibility);
-		if (strlen(visibility_str)>10)
-		    visibility_str[10] = 0;
-		printf("%s",visibility_str);
-		size_t visibility_len = strlen(visibility_str);
-		for (size_t j=0; j<11-visibility_len; j++)
-		    printf(" ");
 
-		printf("%s ",buf);
+		if (use_json) {
+		    json_object* obj = json_object_new_object();
+		    json_object_object_add(obj,"name",json_object_new_string(name_str));
+		    json_object_object_add(obj,"rid",json_object_new_string(dir->d_name));
+		    json_object_object_add(obj,"visibility",json_object_new_string(visibility_to_str(visibility)));
+		    json_object_object_add(obj,"head",json_object_new_string(buf));
+		    json_object_object_add(obj,"description",json_object_new_string(desc_str));
+		    json_object_array_add(arr,obj);
+		} else {
+		    buf[7] = 0;
+		    char* name = strdup(name_str);
+		    if (strlen(name)>16)
+			name[16] = 0;
+		    rad_replace(name,' ','_');
+		    printf("%s",name);
+		    size_t name_len = strlen(name);
+		    for (size_t j=0; j<17-name_len; j++)
+			printf(" ");
+		    printf("%s ",dir->d_name);
+		    size_t rid_len = strlen(dir->d_name);
+		    for (size_t j=0; j<29-rid_len; j++)
+			printf(" ");
 
-		char* desc = strdup(desc_str);
-		if (strlen(desc)>32)
-		    desc[32] = 0;
-		rad_replace(desc,' ','_');
-		printf("%s\n",desc);
-		
+		    char* visibility_str = visibility_to_str(visibility);
+		    if (strlen(visibility_str)>10)
+			visibility_str[10] = 0;
+		    printf("%s",visibility_str);
+		    size_t visibility_len = strlen(visibility_str);
+		    for (size_t j=0; j<11-visibility_len; j++)
+			printf(" ");
+
+		    printf("%s ",buf);
+
+		    char* desc = strdup(desc_str);
+		    if (strlen(desc)>32)
+			desc[32] = 0;
+		    rad_replace(desc,' ','_');
+		    printf("%s\n",desc);
+		}
 	    }
 	}
 	closedir(d);
+	if (use_json) {
+	    printf("%s\n",json_object_to_json_string(arr));
+	    json_object_put(arr);
+	}
     }
     return 0;
 }

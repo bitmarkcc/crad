@@ -194,7 +194,14 @@ int inspect_run (Command c) {
 		    return 1;
 		}
 		git_oid_tostr(buf,HEXSIZ,&head_id);
-		printf("head %s\n",buf);
+		git_commit* head_commit = 0;
+		if (!git_commit_lookup(&head_commit,repo,&head_id)) {
+		    git_time_t t = git_commit_time(head_commit);
+		    printf("head %s %ld\n",buf,(long)t);
+		    git_commit_free(head_commit);
+		} else {
+		    printf("head %s\n",buf);
+		}
 	    }
 	    if (cmd.delegates) {
 		size_t n_delegates = 0;
