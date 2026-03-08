@@ -112,7 +112,8 @@ int node_run () {
     sprintf(sshd_fname,"%s/.ssh/sshd_config",rad_home);
     FILE* f_sshd = fopen(sshd_fname,"w");
     char line [RAD_BUFSIZ];
-    fputs("Port 8777\n",f_sshd);
+    sprintf(line,"Port %d\n",sshd_port);
+    fputs(line,f_sshd);
     sprintf(line,"HostKey %s/.pw/radicle.key\n",rad_home);
     fputs(line,f_sshd);
     sprintf(line,"AuthorizedKeysFile %s/.ssh/authorized_keys\n",rad_home);

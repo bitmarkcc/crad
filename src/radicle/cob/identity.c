@@ -155,7 +155,7 @@ Oid get_root_identity_doc_oid (git_repository* repo) { // also validate sigs
 	    }
 	    commit = parent;
 	    parent = 0;
-	    if (n_commit_oids > commit_oids_capacity) {
+	    if (n_commit_oids >= commit_oids_capacity) {
 		commit_oids_capacity *= 2;
 		commit_oids = realloc(commit_oids,commit_oids_capacity*sizeof(Oid));
 	    }

@@ -367,7 +367,7 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
 	fprintf(stderr,"Can't open password file for writing\n");
 	return 1;
     }
-    if (fputs(passphrase,f)==EOF) {
+    if (passphrase && fputs(passphrase,f)==EOF) {
 	fprintf(stderr,"Failed to put password in password file\n");
 	return 1;
     }
@@ -610,7 +610,9 @@ char* get_rad_network_mode () {
 	json_object* network_mode_val = 0;
 	json_object_object_get_ex(config_obj,"node",&node_val);
 	json_object_object_get_ex(node_val,"networkMode",&network_mode_val);
-	return strdup(json_object_get_string(network_mode_val));
+	if (network_mode_val)
+	    return strdup(json_object_get_string(network_mode_val));
+	return strdup("tor");
     }
     f = fopen(network_mode_fname,"r");
     if (!f) {

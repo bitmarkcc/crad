@@ -673,7 +673,7 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 
     // Check if the rrepo files/oids list matches with the sigref entries list
     for (size_t i=0; i<n_rrepo_files; i++) {
-	iprintf("check rrepo ref %s",rrepo_files_list[i]);
+	//iprintf("check rrepo ref %s",rrepo_files_list[i]);
 	if (!strcmp(rad_refname_relative(rrepo_files_list[i]),"refs/rad/sigrefs")) continue;
 	bool matches = false;
 	for (size_t j=0; j<n_sigref_entries; j++) {
