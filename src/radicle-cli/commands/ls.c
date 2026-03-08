@@ -90,6 +90,7 @@ int ls_run (Command c) {
 		Visibility visibility = 0;
 		if (get_entities_from_identity_doc(&delegates,&allowed,&payload,&visibility,repo)) {
 		    eprintf("failed to get entities from identity document");
+		    if (use_json) continue;
 		    return 1;
 		}
 
@@ -110,6 +111,7 @@ int ls_run (Command c) {
 		Oid head_id = {{0}};
 		if (git_reference_name_to_id(&head_id,repo,"HEAD")) {
 		    eprintf("failed to lookup HEAD oid");
+		    if (use_json) continue;
 		    return 1;
 		}
 		git_oid_tostr(buf,HEXSIZ,&head_id);
