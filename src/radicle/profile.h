@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <libssh/libssh.h>
+#include <libssh-rad/libssh.h>
 
 #include <key.h>
 #include <storage.h>

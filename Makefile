@@ -7,7 +7,7 @@ LDFLAGS  ?=
 CFLAGS  += -I/usr/local/include
 LDFLAGS += -L/usr/local/lib64
 
-LIBS     = -lssh -lgit2 -ljson-c -lsqlite3
+LIBS     = -lssh-rad -lgit2 -ljson-c -lsqlite3
 
 BUILDDIR = build
 
