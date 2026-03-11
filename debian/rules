@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+export PREFIX = /usr
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	$(MAKE) install PREFIX=$(CURDIR)/debian/cradicle/usr CRAD_HOME=$(CURDIR)/debian/cradicle/usr

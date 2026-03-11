@@ -17,7 +17,7 @@ Dependencies:
 - bash
 - basic Linux utilities like rsync
 
-radicle-heartwood will run inside a bubblewrap container for security purposes.
+The radicle-heartwood node will run inside a bubblewrap container for security purposes.
 
 Installation: 
  

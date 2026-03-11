@@ -1,0 +1,27 @@
+Source: cradicle
+Maintainer: AK <ak@xmark.cc>
+Section: net
+Priority: optional
+Standards-Version: 4.6.2
+Build-Depends: debhelper-compat (= 13),
+	       libssh-rad,
+	       libgit2-dev,
+	       libjson-c-dev,
+	       libsqlite3-dev
+
+Package: cradicle
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+	 git,
+	 openssh-server,
+	 bubblewrap,
+	 tor,
+	 torsocks,
+	 slirp4netns,
+	 rsync,
+	 bash
+Description: C implementation of Radicle CLI and Node
+ Cradicle is a C implementation of the Radicle decentralized P2P code
+ collaboration tool. It provides a CLI (crad) and a node wrapper that
+ runs the Radicle heartwood node inside a Bubblewrap sandbox with
+ optional Tor support for private repositories.
