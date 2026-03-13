@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+CRAD_HOME="${CRAD_HOME:-$HOME/.cradicle}"
+SHARE_DIR="/usr/share/cradicle"
+
+mkdir -p "$CRAD_HOME/bin"
+
+for f in "$SHARE_DIR/bin/"*; do
+    name=$(basename "$f")
+    ln -sf "$f" "$CRAD_HOME/bin/$name"
+done
+
+echo "Cradicle installed to $CRAD_HOME"
+echo "Add $CRAD_HOME/bin to your PATH"

@@ -1,9 +1,13 @@
 #!/usr/bin/make -f
 
-export PREFIX = /usr
+export DEB_CFLAGS_MAINT_APPEND = -fPIC
 
 %:
 	dh $@
 
 override_dh_auto_install:
-	$(MAKE) install PREFIX=$(CURDIR)/debian/cradicle/usr CRAD_HOME=$(CURDIR)/debian/cradicle/usr
+	$(MAKE) install PREFIX=$(CURDIR)/debian/cradicle/usr/share/cradicle CRAD_HOME=$(CURDIR)/debian/cradicle/usr/share/cradicle
+	install -d $(CURDIR)/debian/cradicle/usr/bin
+	install -m 755 src/cradicle-install $(CURDIR)/debian/cradicle/usr/bin/cradicle-install
+	install -d $(CURDIR)/debian/cradicle/usr/lib
+	mv $(CURDIR)/debian/cradicle/usr/share/cradicle/lib/libradicle.so $(CURDIR)/debian/cradicle/usr/lib/libradicle.so
