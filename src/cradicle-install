@@ -2,6 +2,7 @@
 set -e
 
 CRAD_HOME="${CRAD_HOME:-$HOME/.cradicle}"
+RAD_HOME="${RAD_HOME:-$HOME/.radicle}"
 SHARE_DIR="/usr/share/cradicle"
 
 mkdir -p "$CRAD_HOME/bin"
@@ -11,5 +12,13 @@ for f in "$SHARE_DIR/bin/"*; do
     ln -sf "$f" "$CRAD_HOME/bin/$name"
 done
 
+# Install radicle binaries
+mkdir -p "$RAD_HOME/bin"
+for f in "$SHARE_DIR/rad-bin/"*; do
+    name=$(basename "$f")
+    ln -sf "$f" "$RAD_HOME/bin/$name"
+done
+
 echo "Cradicle installed to $CRAD_HOME"
+echo "Radicle binaries installed to $RAD_HOME/bin"
 echo "Add $CRAD_HOME/bin to your PATH"

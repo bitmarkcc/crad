@@ -11,3 +11,7 @@ override_dh_auto_install:
 	install -m 755 src/cradicle-install $(CURDIR)/debian/cradicle/usr/bin/cradicle-install
 	install -d $(CURDIR)/debian/cradicle/usr/lib
 	mv $(CURDIR)/debian/cradicle/usr/share/cradicle/lib/libradicle.so $(CURDIR)/debian/cradicle/usr/lib/libradicle.so
+	install -d $(CURDIR)/debian/cradicle/usr/share/cradicle/rad-bin
+	RAD_ARCH=$$(dpkg-architecture -qDEB_HOST_GNU_CPU); \
+	tar xf bin/radicle-*-$${RAD_ARCH}-unknown-linux-musl.tar.xz --strip-components=2 -C $(CURDIR)/debian/cradicle/usr/share/cradicle/rad-bin '*/bin/*'
+	chmod 755 $(CURDIR)/debian/cradicle/usr/share/cradicle/rad-bin/*
