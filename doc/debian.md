@@ -25,12 +25,3 @@ sudo apt install ./cradicle*.deb
 ```
 
 5) As regular user, you can now run `cradicle-install` and follow the instructions there.
-
-For **Tails**, add the following to $RAD_HOME/config.json (default $HOME/.radicle/config.json), in the "node" object, after you create an identity:
-```
-"proxy": "10.0.2.2:9050",
-"onion": {
-  "mode": "proxy",
-  "address": "10.0.2.2:9050"
-}
-```

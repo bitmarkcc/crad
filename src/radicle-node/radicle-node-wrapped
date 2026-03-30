@@ -47,6 +47,46 @@ fi
 
 cradicle-node
 
+if [ "$use_tor" = true ]; then
+    # Ensure radicle config has proxy/onion settings for the bwrap sandbox,
+    # where Tor is reachable at 10.0.2.2:9050 via the slirp4netns gateway.
+    python3 -c "
+import json, os
+cfg = '$rad_home/config.json'
+if os.path.exists(cfg):
+    with open(cfg) as f: c = json.load(f)
+    node = c.setdefault('node', {})
+    changed = False
+    if node.get('proxy') != '10.0.2.2:9050':
+        node['proxy'] = '10.0.2.2:9050'
+        changed = True
+    onion = {'mode': 'proxy', 'address': '10.0.2.2:9050'}
+    if node.get('onion') != onion:
+        node['onion'] = onion
+        changed = True
+    if changed:
+        with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
+"
+else
+    # Remove proxy/onion settings for clearnet mode
+    python3 -c "
+import json, os
+cfg = '$rad_home/config.json'
+if os.path.exists(cfg):
+    with open(cfg) as f: c = json.load(f)
+    node = c.get('node', {})
+    changed = False
+    if 'proxy' in node:
+        del node['proxy']
+        changed = True
+    if 'onion' in node:
+        del node['onion']
+        changed = True
+    if changed:
+        with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
+"
+fi
+
 # --- Sandboxed rad node ---
 # From here on, disable set -e to avoid subtle interactions with
 # background processes, wait, and signal handling.
@@ -77,6 +117,9 @@ if [ "$use_tor" = true ]; then
         --setenv TORSOCKS_TOR_PORT "9050"
         --setenv TORSOCKS_ALLOW_INBOUND "1"
     )
+    if [ -f "$rad_home/lib/libtorsocks.so" ]; then
+        tor_env+=(--setenv TORSOCKS_LIBRARY "/tmp/.radicle/lib/libtorsocks.so")
+    fi
 else
     node_cmd='
         for _ in $(seq 1 50); do
