@@ -193,7 +193,7 @@ int exec_command (const char* file, char* const argv []) {
 	return 1;
     case 0:
 	//setpgrp(); //todo check if needed
-	int fd = open("/dev/null",O_WRONLY);
+	/*int fd = open("/dev/null",O_WRONLY);
 	if (!fd) {
 	    fprintf(stderr,"failed to open /dev/null for writing\n");
 	    return 1;
@@ -205,7 +205,7 @@ int exec_command (const char* file, char* const argv []) {
 	if (dup2(fd,2)<0) {
 	    fprintf(stderr,"failed to redirect stderr to /dev/null\n");
 	    return 1;
-	}
+	    }*/
 	return execvp(file,argv);
     default:
 	int status;

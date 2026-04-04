@@ -44,13 +44,9 @@ if [ -d "$crad_repo" ] && git --git-dir="$crad_repo" rev-parse "refs/namespaces/
 fi
 
 if [ "$is_delegate" = true ]; then
-    # Delegate: push our refs to rad storage before fetching/announcing
-    if [ -d "$crad_repo" ]; then
-        if [ ! -d "$rad_repo" ]; then
-            cp -a "$crad_repo" "$rad_repo"
-        else
-            git --git-dir="$rad_repo" fetch "$crad_repo" '+refs/*:refs/*' 2>/dev/null
-        fi
+    # Delegate: ensure rad storage exists for seeding/inventory
+    if [ -d "$crad_repo" ] && [ ! -d "$rad_repo" ]; then
+        cp -a "$crad_repo" "$rad_repo"
     fi
 fi
 
@@ -133,8 +129,15 @@ bwrap \
     -- rad sync --fetch "rad:$repo_id"
 
 if [ "$is_delegate" = true ]; then
+    # Push crad refs to rad storage AFTER network fetch, so our local
+    # state (including COB refs like wallet) takes precedence over
+    # whatever the network sent. This ensures sigrefs reflect our
+    # locally-signed refs rather than being overwritten by the fetch.
+    if [ -d "$crad_repo" ] && [ -d "$rad_repo" ]; then
+        git --git-dir="$rad_repo" fetch "$crad_repo" '+refs/*:refs/*' 2>/dev/null
+    fi
+
     # Announce the crad delegate's refs via the node's control socket.
-    # The sigrefs are already signed by crad and synced to rad storage.
     bwrap \
         --ro-bind /usr /usr \
         --ro-bind /bin /bin \

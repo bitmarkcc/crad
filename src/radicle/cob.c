@@ -6,6 +6,7 @@
 #include <cob/identity.h>
 #include <cob/issue.h>
 #include <cob/patch.h>
+#include <cob/wallet.h>
 #include <document.h>
 #include <print.h>
 
@@ -19,6 +20,8 @@ char* cob_type_name (CobType type) {
 	return strdup("xyz.radicle.issue");
     case COB_PATCH:
 	return strdup("xyz.radicle.patch");
+    case COB_WALLET:
+	return strdup("xyz.radicle.wallet");
     default:
 	return strdup("xyz.radicle.unknown");
     }
@@ -944,6 +947,208 @@ int cob_patch_delete (RadRepo rrepo, Pubkey signer, Oid patch_id) {
     sprintf(refname,"refs/namespaces/%s/refs/heads/patches/%s",did_raw,patch_id_str);
     git_reference_remove(rrepo.repo,refname); // may not exist, ignore error
     free(patch_id_str);
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	eprintf("failed to sign refs");
+	return 1;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	return 1;
+    }
+    return 0;
+}
+
+char** wallet_actions_to_json_strings (const WalletAction* actions, size_t n) {
+    if (!n) return 0;
+    char** jsons = malloc(n*sizeof(char*));
+    for (size_t i=0; i<n; i++) {
+	json_object* obj = json_object_new_object();
+	WalletAction action = actions[i];
+	if (action.type == WALLET_ACTION_ADD) {
+	    json_object_object_add(obj,"currency",json_object_new_string(action.currency));
+	    json_object_object_add(obj,"address",json_object_new_string(action.address));
+	    json_object_object_add(obj,"type",json_object_new_string("add"));
+	}
+	else if (action.type == WALLET_ACTION_REMOVE) {
+	    json_object_object_add(obj,"currency",json_object_new_string(action.currency));
+	    json_object_object_add(obj,"type",json_object_new_string("remove"));
+	}
+	jsons[i] = rad_remove_space_json(json_object_to_json_string(obj));
+    }
+    return jsons;
+}
+
+int transaction_wallet_add_entry (WalletTransaction* tx, char* currency, char* address) {
+    WalletAction action = action_wallet_default();
+    action.type = WALLET_ACTION_ADD;
+    action.currency = currency;
+    action.address = address;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+int transaction_wallet_add_remove (WalletTransaction* tx, char* currency) {
+    WalletAction action = action_wallet_default();
+    action.type = WALLET_ACTION_REMOVE;
+    action.currency = currency;
+    rad_push_array(&tx->n_actions,(void**)&tx->actions,sizeof(action),&action);
+    return 0;
+}
+
+RepoEntry create_cob_wallet (RadRepo rrepo, char* message, WalletAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer) {
+    Oid parents [1] = {get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 1;
+    char** contents = wallet_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.wallet";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[0];
+    Oid root_id = {{0}};
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,root_id);
+}
+
+RepoEntry update_cob_wallet (RadRepo rrepo, char* message, WalletAction* actions, size_t n_actions, OidEmbed* embeds, size_t n_embeds, Pubkey signer, Oid wallet_id) {
+    char buf [HEXSIZ];
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    const char* refname = 0;
+    Oid parent_oid = {{0}};
+    char glob [256];
+    sprintf(glob,"refs/namespaces/*/refs/cobs/xyz.radicle.wallet/%s",git_oid_tostr(buf,HEXSIZ,&wallet_id));
+    git_reference_iterator* refit = 0;
+    if (git_reference_iterator_glob_new(&refit,rrepo.repo,glob)) {
+	eprintf("failed to create glob iterator");
+	return re;
+    }
+    uint64_t latest_entry_time = 0;
+    int ret = 0;
+    while (!(ret = git_reference_next_name(&refname,refit))) {
+	Oid entry_id = {{0}};
+	if (git_reference_name_to_id(&entry_id,rrepo.repo,refname)) {
+	    eprintf("failed to get oid from reference name: %s",refname);
+	    return re;
+	}
+	git_commit* commit = 0;
+	if (git_commit_lookup(&commit,rrepo.repo,&entry_id)) {
+	    eprintf("failed to lookup git commit");
+	    return re;
+	}
+	git_time_t commit_time = git_commit_time(commit);
+	if (commit_time > latest_entry_time) {
+	    latest_entry_time = commit_time;
+	    parent_oid = entry_id;
+	}
+    }
+    Oid parents [2] = {parent_oid,get_root_identity_commit_oid(rrepo.repo)};
+    size_t n_parents = 2;
+    char** contents = wallet_actions_to_json_strings(actions,n_actions);
+    Create create;
+    create.type_name = "xyz.radicle.wallet";
+    create.version = COB_VERSION;
+    create.message = message;
+    create.n_embeds = n_embeds;
+    create.embeds = embeds;
+    create.n_contents = n_actions;
+    create.contents = contents;
+    Oid resource = parents[n_parents-1];
+    return cob_create(rrepo.repo,signer,resource,parents,n_parents,create,wallet_id);
+}
+
+Oid find_wallet_cob (RadRepo rrepo) {
+    Oid zero = {{0}};
+    SimpleSet cobs;
+    set_init(&cobs);
+    if (get_cobs(&cobs,COB_WALLET,rrepo)) return zero;
+    size_t n = 0;
+    char** list = set_to_array(&cobs,&n);
+    if (!n) return zero;
+    // Use the first (and typically only) wallet COB entry to find its root
+    Oid entry_oid = {{0}};
+    git_oid_fromstr(&entry_oid,list[0]);
+    // Walk back to the root commit (no parents or single identity parent)
+    git_commit* commit = 0;
+    if (git_commit_lookup(&commit,rrepo.repo,&entry_oid)) return zero;
+    while (git_commit_parentcount(commit) == 2) {
+	git_commit* parent = 0;
+	if (git_commit_parent(&parent,commit,0)) return zero;
+	commit = parent;
+    }
+    Oid root = *git_commit_id(commit);
+    return root;
+}
+
+RepoEntry cob_wallet_add (RadRepo rrepo, Pubkey signer, char* currency, char* address) {
+    Oid zero = {{0}};
+    WalletTransaction tx = transaction_wallet_default();
+    transaction_wallet_add_entry(&tx,currency,address);
+    Oid wallet_id = find_wallet_cob(rrepo);
+    RepoEntry re;
+    if (git_oid_is_zero(&wallet_id)) {
+	re = create_cob_wallet(rrepo,"Create wallet",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer);
+    } else {
+	re = update_cob_wallet(rrepo,"Add wallet entry",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,wallet_id);
+    }
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to add wallet entry failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+RepoEntry cob_wallet_remove (RadRepo rrepo, Pubkey signer, char* currency) {
+    Oid zero = {{0}};
+    RepoEntry re;
+    re.oid = zero;
+    Oid wallet_id = find_wallet_cob(rrepo);
+    if (git_oid_is_zero(&wallet_id)) {
+	eprintf("no wallet COB found");
+	return re;
+    }
+    WalletTransaction tx = transaction_wallet_default();
+    transaction_wallet_add_remove(&tx,currency);
+    re = update_cob_wallet(rrepo,"Remove wallet entry",tx.actions,tx.n_actions,tx.embeds,tx.n_embeds,signer,wallet_id);
+    if (git_oid_is_zero(&re.oid)) {
+	eprintf("transaction to remove wallet entry failed");
+	return re;
+    }
+    Oid oid = rad_repo_sign_refs(rrepo,signer);
+    if (git_oid_is_zero(&oid)) {
+	re.oid = zero;
+	return re;
+    }
+    if (create_sigrefs_commit(rrepo,signer,oid)) {
+	eprintf("failed to create new sigrefs commit");
+	re.oid = zero;
+    }
+    return re;
+}
+
+int cob_wallet_delete (RadRepo rrepo, Pubkey signer, Oid wallet_id) {
+    char refname [256];
+    char buf [HEXSIZ];
+    char* wallet_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&wallet_id));
+    const char* did_raw = pubkey_to_did(signer.bytes)+8;
+    sprintf(refname,"refs/namespaces/%s/refs/cobs/xyz.radicle.wallet/%s",did_raw,wallet_id_str);
+    if (git_reference_remove(rrepo.repo,refname)) {
+	eprintf("failed to remove git reference %s",refname);
+    }
+    free(wallet_id_str);
     Oid oid = rad_repo_sign_refs(rrepo,signer);
     if (git_oid_is_zero(&oid)) {
 	eprintf("failed to sign refs");

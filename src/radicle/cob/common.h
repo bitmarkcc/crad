@@ -26,7 +26,8 @@ typedef struct {
 typedef enum {
     COB_IDENTITY,
     COB_ISSUE,
-    COB_PATCH
+    COB_PATCH,
+    COB_WALLET
 } CobType;
 
 #endif

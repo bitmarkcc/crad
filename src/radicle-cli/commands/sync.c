@@ -2,8 +2,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <dirent.h>
-
 #include <commands/sync.h>
 #include <command.h>
 #include <profile.h>
@@ -180,40 +178,17 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 
 	Pubkey signer = profile_get_pubkey();
 	const char* namespace_me = pubkey_to_did(signer.bytes)+8;
-	
-	char* namespaces_src = malloc(strlen(dsttmp)+32);
-	sprintf(namespaces_src,"%srefs/namespaces",dsttmp);
-	char* namespaces_dst = malloc(strlen(dst)+32);
-	sprintf(namespaces_dst,"%srefs/namespaces",dst);
-	if (!access(namespaces_src,F_OK) && !access(namespaces_dst,F_OK)) {
-	    DIR* d = opendir(namespaces_src);
-	    struct dirent* dir = 0;
-	    if (!d) {
-		eprintf("failed to open directory %s",namespaces_src);
-		return 1;
-	    }
-	    while (dir = readdir(d)) {
-		if (strlen(dir->d_name)>2) {
-		    //iprintf("namespace dir file %s",dir->d_name);
-		    if (!strcmp(dir->d_name,namespace_me)) continue;
-		    char* namespaces_src_cur = malloc(strlen(namespaces_src)+64);
-		    sprintf(namespaces_src_cur,"%s/%s",namespaces_src,dir->d_name);
-		    char* namespaces_dst_cur = malloc(strlen(namespaces_dst)+2);
-		    sprintf(namespaces_dst_cur,"%s/",namespaces_dst);
-		    argv[0] = "rsync";
-		    argv[1] = "-a";
-		    argv[2] = namespaces_src_cur;
-		    argv[3] = namespaces_dst_cur;
-		    argv[4] = 0;
-		    //iprintf("exec: %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3]);	
-		    if (exec_command("rsync",argv)) {
-			eprintf("rsync command failed");
-			return 1;
-		    }
-		}
-	    }
-	    closedir(d);
-	}
+
+	// sync namespaces from seed temp to crad using git fetch
+	// (handles both packed and loose refs, unlike rsync of ref files)
+	argv[0] = "git";
+	argv[1] = "--git-dir";
+	argv[2] = dst;
+	argv[3] = "fetch";
+	argv[4] = dsttmp;
+	argv[5] = "+refs/namespaces/*:refs/namespaces/*";
+	argv[6] = 0;
+	exec_command("git",argv);
 
 	// sync canonical head
 	
@@ -378,7 +353,7 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	}
     }
     else { // use rad
-	char* argv [3];
+	char* argv [10];
 	char* bin_path = malloc(strlen(crad_home)+32);
 	sprintf(bin_path,"%s/bin/rad-sync-wrapped",crad_home);
 	argv[0] = bin_path;
@@ -416,44 +391,20 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	    return 1;
 	}
 
-	// sync the 'not-mine' namespaces
-	
+	// sync namespaces from rad to crad using git fetch
+	// (handles both packed and loose refs, unlike rsync of ref files)
+
 	Pubkey signer = profile_get_pubkey();
 	const char* namespace_me = pubkey_to_did(signer.bytes)+8;
-	
-	char* namespaces_src = malloc(strlen(rad_home)+128);
-	sprintf(namespaces_src,"%s/storage/%s/refs/namespaces",rad_home,rid_str);
-	char* namespaces_dst = malloc(strlen(dst)+32);
-	sprintf(namespaces_dst,"%s/storage/%s/refs/namespaces",crad_home,rid_str);
-	
-	if (!access(namespaces_src,F_OK) && !access(namespaces_dst,F_OK)) {
-	    DIR* d = opendir(namespaces_src);
-	    struct dirent* dir = 0;
-	    if (!d) {
-		eprintf("failed to open directory %s",namespaces_src);
-		return 1;
-	    }
-	    while (dir = readdir(d)) {
-		if (strlen(dir->d_name)>2) {
-		    if (!strcmp(dir->d_name,namespace_me)) continue;
-		    char* namespaces_src_cur = malloc(strlen(namespaces_src)+64);
-		    sprintf(namespaces_src_cur,"%s/%s",namespaces_src,dir->d_name);
-		    char* namespaces_dst_cur = malloc(strlen(namespaces_dst)+2);
-		    sprintf(namespaces_dst_cur,"%s/",namespaces_dst);
-		    argv[0] = "rsync";
-		    argv[1] = "-a";
-		    argv[2] = namespaces_src_cur;
-		    argv[3] = namespaces_dst_cur;
-		    argv[4] = 0;
-		    //iprintf("exec: %s -- %s -- %s -- %s",argv[0],argv[1],argv[2],argv[3]);	
-		    if (exec_command("rsync",argv)) {
-			eprintf("rsync command failed");
-			return 1;
-		    }
-		}
-	    }
-	    closedir(d);
-	}
+
+	argv[0] = "git";
+	argv[1] = "--git-dir";
+	argv[2] = dst;
+	argv[3] = "fetch";
+	argv[4] = src;
+	argv[5] = "+refs/namespaces/*:refs/namespaces/*";
+	argv[6] = 0;
+	exec_command("git",argv);
 
 	// sync canonical HEAD
 	

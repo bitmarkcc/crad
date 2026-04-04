@@ -5,6 +5,7 @@
 #include <repo.h>
 #include <cob/issue.h>
 #include <cob/patch.h>
+#include <cob/wallet.h>
 
 char* cob_type_name (CobType type);
 RepoEntry cob_identity_init (Document doc, git_repository* repo, Pubkey signer);
@@ -23,6 +24,9 @@ RepoEntry cob_patch_assign (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSe
 RepoEntry cob_patch_label (RadRepo rrepo, Pubkey signer, Oid patch_id, SimpleSet* labels);
 RepoEntry cob_patch_lifecycle (RadRepo rrepo, Pubkey signer, Oid patch_id, char* state);
 int cob_patch_delete (RadRepo rrepo, Pubkey signer, Oid patch_id);
+RepoEntry cob_wallet_add (RadRepo rrepo, Pubkey signer, char* currency, char* address);
+RepoEntry cob_wallet_remove (RadRepo rrepo, Pubkey signer, char* currency);
+int cob_wallet_delete (RadRepo rrepo, Pubkey signer, Oid wallet_id);
 int get_cobs (SimpleSet* cobs, CobType type, RadRepo rrepo);
 
 #endif

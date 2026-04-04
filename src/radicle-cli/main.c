@@ -15,6 +15,7 @@
 #include <commands/inspect.h>
 #include <commands/patch.h>
 #include <commands/source.h>
+#include <commands/wallet.h>
 
 Command parse_args(int argc, char** argv) {
     
@@ -85,6 +86,7 @@ void print_help() {
     printf("  source\n");
     printf("  sync\n");
     printf("  validate\n");
+    printf("  wallet\n");
     // Add more help info as needed
 }
 
@@ -153,6 +155,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"source")) {
 		return source_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"wallet")) {
+		return wallet_run(subcommand);
 	    }
 	    else {
 		eprintf("invalid command (%s)",exe);
