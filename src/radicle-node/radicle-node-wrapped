@@ -45,7 +45,9 @@ else
     echo "clearnet" > "$crad_home/node/network-mode"
 fi
 
+set +e
 cradicle-node
+set -e
 
 if [ "$use_tor" = true ]; then
     # Ensure radicle config has proxy/onion settings for the bwrap sandbox,
