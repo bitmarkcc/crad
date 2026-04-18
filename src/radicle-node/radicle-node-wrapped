@@ -49,12 +49,19 @@ set +e
 cradicle-node
 set -e
 
+onion_addr=""
+hs_hostname="$crad_home/tor/hidden_service/hostname"
+if [ -f "$hs_hostname" ]; then
+    onion_addr="$(cat "$hs_hostname" | tr -d '[:space:]')"
+fi
+
 if [ "$use_tor" = true ]; then
-    # Ensure radicle config has proxy/onion settings for the bwrap sandbox,
+    # Ensure radicle config has proxy/onion/seeding settings for the bwrap sandbox,
     # where Tor is reachable at 10.0.2.2:9050 via the slirp4netns gateway.
     python3 -c "
 import json, os
 cfg = '$rad_home/config.json'
+onion_addr = '$onion_addr'
 if os.path.exists(cfg):
     with open(cfg) as f: c = json.load(f)
     node = c.setdefault('node', {})
@@ -66,14 +73,31 @@ if os.path.exists(cfg):
     if node.get('onion') != onion:
         node['onion'] = onion
         changed = True
+    seeding = {'default': 'allow', 'scope': 'all'}
+    if node.get('seedingPolicy') != seeding:
+        node['seedingPolicy'] = seeding
+        changed = True
+    listen = ['0.0.0.0:8776']
+    if node.get('listen') != listen:
+        node['listen'] = listen
+        changed = True
+    if onion_addr:
+        ext = [onion_addr + ':8776']
+        if node.get('externalAddresses') != ext:
+            node['externalAddresses'] = ext
+            changed = True
+        if node.get('alias') != onion_addr:
+            node['alias'] = onion_addr
+            changed = True
     if changed:
         with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
 "
 else
-    # Remove proxy/onion settings for clearnet mode
+    # Remove proxy/onion settings for clearnet mode, keep seeding policy
     python3 -c "
 import json, os
 cfg = '$rad_home/config.json'
+onion_addr = '$onion_addr'
 if os.path.exists(cfg):
     with open(cfg) as f: c = json.load(f)
     node = c.get('node', {})
@@ -84,6 +108,22 @@ if os.path.exists(cfg):
     if 'onion' in node:
         del node['onion']
         changed = True
+    seeding = {'default': 'allow', 'scope': 'all'}
+    if node.get('seedingPolicy') != seeding:
+        node['seedingPolicy'] = seeding
+        changed = True
+    if onion_addr:
+        listen = ['0.0.0.0:8776']
+        if node.get('listen') != listen:
+            node['listen'] = listen
+            changed = True
+        ext = [onion_addr + ':8776']
+        if node.get('externalAddresses') != ext:
+            node['externalAddresses'] = ext
+            changed = True
+        if node.get('alias') != onion_addr:
+            node['alias'] = onion_addr
+            changed = True
     if changed:
         with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
 "
