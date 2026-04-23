@@ -86,9 +86,6 @@ if os.path.exists(cfg):
         if node.get('externalAddresses') != ext:
             node['externalAddresses'] = ext
             changed = True
-        if node.get('alias') != onion_addr:
-            node['alias'] = onion_addr
-            changed = True
     if changed:
         with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
 "
@@ -120,9 +117,6 @@ if os.path.exists(cfg):
         ext = [onion_addr + ':8776']
         if node.get('externalAddresses') != ext:
             node['externalAddresses'] = ext
-            changed = True
-        if node.get('alias') != onion_addr:
-            node['alias'] = onion_addr
             changed = True
     if changed:
         with open(cfg, 'w') as f: json.dump(c, f, indent=2); f.write('\n')
