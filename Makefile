@@ -48,7 +48,8 @@ CLI_SRC = src/radicle-cli/main.c \
           src/radicle-cli/commands/patch.c \
           src/radicle-cli/commands/inspect.c \
           src/radicle-cli/commands/source.c \
-          src/radicle-cli/commands/wallet.c
+          src/radicle-cli/commands/wallet.c \
+          src/radicle-cli/commands/seed.c
 
 CLI_OBJ = $(patsubst src/radicle-cli/%.c,$(BUILDDIR)/cli/%.o,$(CLI_SRC))
 CLI_OUT = $(BUILDDIR)/crad
@@ -70,6 +71,7 @@ REMOTE_OUT = $(BUILDDIR)/git-remote-rad
 SCRIPTS = src/radicle-node/radicle-node-wrapped \
           src/radicle-node/rad-clone-wrapped \
           src/radicle-node/rad-sync-wrapped \
+          src/radicle-node/rad-seed-wrapped \
           src/radicle-node/rad-auth-wrapped \
           src/radicle-node/rad-node-status-wrapped \
           src/radicle-node/rad-node-stop-wrapped \
@@ -124,6 +126,7 @@ uninstall:
 	rm -f $(PREFIX)/bin/radicle-node-wrapped
 	rm -f $(PREFIX)/bin/rad-clone-wrapped
 	rm -f $(PREFIX)/bin/rad-sync-wrapped
+	rm -f $(PREFIX)/bin/rad-seed-wrapped
 	rm -f $(PREFIX)/bin/rad-node-status-wrapped
 	rm -f $(PREFIX)/bin/rad-node-stop-wrapped
 	rm -f $(PREFIX)/bin/crad-rsync

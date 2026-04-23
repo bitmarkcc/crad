@@ -16,6 +16,7 @@
 #include <commands/patch.h>
 #include <commands/source.h>
 #include <commands/wallet.h>
+#include <commands/seed.h>
 
 Command parse_args(int argc, char** argv) {
     
@@ -82,6 +83,7 @@ void print_help() {
     printf("  issue\n");
     printf("  ls\n");
     printf("  patch\n");
+    printf("  seed\n");
     printf("  self\n");
     printf("  source\n");
     printf("  sync\n");
@@ -137,6 +139,9 @@ int main (int argc, char** argv)  {
 	    }
 	    else if (!strcmp(exe,"id")) {
 		return id_run(subcommand);
+	    }
+	    else if (!strcmp(exe,"seed")) {
+		return seed_run(subcommand);
 	    }
 	    else if (!strcmp(exe,"self")) {
 		return self_run(subcommand);

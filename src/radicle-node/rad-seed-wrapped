@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# Seed a repository on the Radicle network via the running rad node.
+# Runs rad seed in a filesystem-isolated sandbox. No network access
+# is needed — communication with the node is via the control socket.
+#
+# Usage: rad-seed-wrapped <rid>
+#
+# Requirements: bwrap, rad node must be running (via radicle-node-wrapped)
+#
+
+set -e
+
+if [ -n "$CRAD_HOME" ] && [ -n "$RAD_HOME" ]
+then
+    export PATH="$CRAD_HOME/bin:$RAD_HOME/bin:$PATH"
+fi
+
+rad_home="`crad self --node-home`"
+
+rid="$1"
+if [ -z "$rid" ]; then
+    echo "Usage: rad-seed-wrapped <rid>" >&2
+    exit 1
+fi
+
+bwrap \
+    --ro-bind /usr /usr \
+    --ro-bind /bin /bin \
+    --ro-bind /lib /lib \
+    --ro-bind /lib64 /lib64 \
+    --ro-bind /etc /etc \
+    --proc /proc \
+    --dev /dev \
+    --tmpfs /tmp \
+    --clearenv \
+    --unshare-all \
+    --uid 0 --gid 0 \
+    --bind "$rad_home" /tmp/.radicle \
+    --chdir /tmp \
+    --setenv HOME "/tmp" \
+    --setenv PATH "/tmp/.radicle/bin:/usr/bin:/bin" \
+    --setenv LANG "$LANG" \
+    --setenv TERM "$TERM" \
+    -- rad seed "$rid"

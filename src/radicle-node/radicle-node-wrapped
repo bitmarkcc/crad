@@ -73,7 +73,7 @@ if os.path.exists(cfg):
     if node.get('onion') != onion:
         node['onion'] = onion
         changed = True
-    seeding = {'default': 'allow', 'scope': 'all'}
+    seeding = {'default': 'block'}
     if node.get('seedingPolicy') != seeding:
         node['seedingPolicy'] = seeding
         changed = True
@@ -105,7 +105,7 @@ if os.path.exists(cfg):
     if 'onion' in node:
         del node['onion']
         changed = True
-    seeding = {'default': 'allow', 'scope': 'all'}
+    seeding = {'default': 'block'}
     if node.get('seedingPolicy') != seeding:
         node['seedingPolicy'] = seeding
         changed = True
