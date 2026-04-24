@@ -8,6 +8,9 @@ typedef struct {
     bool public;
     bool private;
     bool json;
+    bool refresh;
+    int limit;
+    char* query;
 } LsCommand;
 
 int ls_run (Command c);
