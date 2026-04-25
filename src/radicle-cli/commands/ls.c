@@ -20,13 +20,14 @@ LsCommand command_ls_default () {
     cmd.json = false;
     cmd.refresh = false;
     cmd.limit = 0;
+    cmd.skip = 0;
     cmd.query = 0;
     return cmd;
 }
 
 void print_help_ls () {
     printf("crad ls (List repositories) Usage:\n");
-    printf("crad ls [--public] [--private] [--json] [--refresh] [--limit N] [--query <text>]\n");
+    printf("crad ls [--public] [--private] [--json] [--refresh] [--limit N] [--skip N] [--query <text>]\n");
 }
 
 LsCommand parse_args_ls (int argc, char** argv) {
@@ -46,6 +47,9 @@ LsCommand parse_args_ls (int argc, char** argv) {
 	}
 	else if (!strcmp(argv[i],"--limit") || !strcmp(argv[i],"-n")) {
 	    if (i+1 < argc) cmd.limit = atoi(argv[++i]);
+	}
+	else if (!strcmp(argv[i],"--skip")) {
+	    if (i+1 < argc) cmd.skip = atoi(argv[++i]);
 	}
 	else if (!strcmp(argv[i],"--query") || !strcmp(argv[i],"-q")) {
 	    if (i+1 < argc) cmd.query = strdup(argv[++i]);
@@ -170,6 +174,8 @@ static int query_repo_cache (sqlite3* db, LsCommand cmd, bool use_json) {
     n += sprintf(sql+n," ORDER BY name");
     if (cmd.limit > 0)
 	n += sprintf(sql+n," LIMIT %d",cmd.limit);
+    if (cmd.skip > 0)
+	n += sprintf(sql+n," OFFSET %d",cmd.skip);
     n += sprintf(sql+n,";");
 
     sqlite3_stmt* stmt = 0;
@@ -299,12 +305,12 @@ int ls_run (Command c) {
 		count = sqlite3_column_int(count_stmt,0);
 	    sqlite3_finalize(count_stmt);
 	    if (count == 0) {
-		iprintf("building repo cache (first run)...");
+		//iprintf("building repo cache (first run)...");
 		if (refresh_repo_cache(s,db)) {
 		    sqlite3_close(db);
 		    return 1;
 		}
-		iprintf("repo cache built");
+		//iprintf("repo cache built");
 	    }
 	}
 

@@ -10,6 +10,7 @@ typedef struct {
     bool json;
     bool refresh;
     int limit;
+    int skip;
     char* query;
 } LsCommand;
 
