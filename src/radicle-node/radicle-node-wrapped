@@ -6,7 +6,7 @@
 # Use --clearnet to connect directly without Tor.
 #
 # Requirements:
-#   Default (Tor): bwrap, slirp4netns, torsocks, tor (on host at 127.0.0.1:9050)
+#   Default (Tor): bwrap, slirp4netns, torsocks, tor (on host at 127.0.0.1)
 #   Clearnet:      bwrap, slirp4netns
 #
 
@@ -55,21 +55,28 @@ if [ -f "$hs_hostname" ]; then
     onion_addr="$(cat "$hs_hostname" | tr -d '[:space:]')"
 fi
 
+tor_socks_port=9050
+if [ -f "$crad_home/tor/socks_port" ]; then
+    tor_socks_port="$(cat "$crad_home/tor/socks_port" | tr -d '[:space:]')"
+fi
+
 if [ "$use_tor" = true ]; then
     # Ensure radicle config has proxy/onion/seeding settings for the bwrap sandbox,
-    # where Tor is reachable at 10.0.2.2:9050 via the slirp4netns gateway.
+    # where Tor is reachable at 10.0.2.2:$tor_socks_port via the slirp4netns gateway.
     python3 -c "
 import json, os
 cfg = '$rad_home/config.json'
 onion_addr = '$onion_addr'
+tor_port = '$tor_socks_port'
 if os.path.exists(cfg):
     with open(cfg) as f: c = json.load(f)
     node = c.setdefault('node', {})
     changed = False
-    if node.get('proxy') != '10.0.2.2:9050':
-        node['proxy'] = '10.0.2.2:9050'
+    proxy = '10.0.2.2:' + tor_port
+    if node.get('proxy') != proxy:
+        node['proxy'] = proxy
         changed = True
-    onion = {'mode': 'proxy', 'address': '10.0.2.2:9050'}
+    onion = {'mode': 'proxy', 'address': proxy}
     if node.get('onion') != onion:
         node['onion'] = onion
         changed = True
@@ -150,7 +157,7 @@ if [ "$use_tor" = true ]; then
     '
     tor_env=(
         --setenv TORSOCKS_TOR_ADDRESS "10.0.2.2"
-        --setenv TORSOCKS_TOR_PORT "9050"
+        --setenv TORSOCKS_TOR_PORT "$tor_socks_port"
         --setenv TORSOCKS_ALLOW_INBOUND "1"
     )
     if [ -f "$rad_home/lib/libtorsocks.so" ]; then
