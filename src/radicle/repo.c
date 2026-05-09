@@ -654,7 +654,7 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 	    if (strcmp(files_list[i],default_ref))
 		continue;
 	}
-	//iprintf("check file %s",files_list[i]);
+	dbprintf("check file %s",files_list[i]);
 	bool matches = false;
 	for (size_t j=0; j<n_rrepo_files; j++) {
 	    if (git_oid_equal(oids_list+i,rrepo_oids_list+j)) {

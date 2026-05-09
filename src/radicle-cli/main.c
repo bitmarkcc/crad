@@ -33,6 +33,9 @@ Command parse_args(int argc, char** argv) {
 	if (!strcmp(arg,"--json")) {
 	    cmd.json = true;
 	}
+	else if (!strcmp(arg,"--verbose") || !strcmp(arg,"-v")) {
+	    verbose = true;
+	}
 	else if ((!strcmp(arg,"--help") || !strcmp(arg,"-h")) && i==1) {
 	    cmd.type = CMD_HELP;
 	    command_set = true;
@@ -74,6 +77,7 @@ void print_help() {
     printf("  --help, -h       Print help information\n");
     printf("  --version        Print version information\n");
     printf("  --json           Output in JSON format (for version command)\n");
+    printf("  --verbose, -v    Enable verbose debug output\n");
     printf("Commands:\n");
     printf("  auth\n");
     printf("  clone\n");
