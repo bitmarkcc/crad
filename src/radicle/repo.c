@@ -667,7 +667,7 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 	if (!matches) {
 	    allmatch = false;
 	    eprintf("a ref from local repo doesn't match with one in the rad repo");
-	    break;
+	    return rid;
 	}
     }
 
