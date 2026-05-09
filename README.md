@@ -23,7 +23,7 @@ Installation:
  
 `make` 
 `make install` 
-Add $RAD_HOME/bin ($HOME/.radicle/bin by default) and $CRAD_HOME/bin ($HOME/.cradicle/bin) to your $PATH. Put $CRAD_HOME/bin before $RAD_HOME/bin, so that git-remote-rad comes from $CRAD_HOME/bin.
+Add $CRAD_HOME/bin ($HOME/.cradicle/bin) to your $PATH.
 Add $CRAD_HOME/lib to your $LD_LIBRARY_PATH.
 
 Usage:
