@@ -1,3 +1,15 @@
+cradicle (0.1.0-2) unstable; urgency=low
+
+  * Add wallet COB type for cryptocurrency wallet addresses
+  * Add seed command for seeding repositories
+  * Add --skip and --limit options to crad ls with SQLite caching
+  * Add custom Tor SOCKS port support in radicle-node-wrapped
+  * Set selective seeding policy by default
+  * Fix radicle-node-wrapped for AppImage compatibility
+  * Fix empty passphrase handling for private SSH keys
+
+ -- AK <ak@xmark.cc>  Fri, 09 May 2026 10:00:00 +0000
+
 cradicle (0.1.0-1) unstable; urgency=low
 
   * First debian release
