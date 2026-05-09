@@ -509,10 +509,10 @@ int sync_run (Command c) { // todo: sync refs/rad/id
     }	
 
     Oid rid_valid = {{0}};
-    if (strlen(cwd))
-	rid_valid = rad_repo_validate(cwd);
-    else
-	rid_valid = rad_repo_validate(dst);
+    rid_valid = rad_repo_validate(dst);
+    if (strlen(cwd)) {
+	iprintf("run `git pull` to integrate the latest changes");
+    }
     if (!git_oid_equal(&rid_valid,&rid)) {
 	eprintf("repo invalid");
 	return 1;
