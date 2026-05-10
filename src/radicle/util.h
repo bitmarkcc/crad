@@ -10,6 +10,8 @@
 #define RAD_BUFSIZ 256
 #define RAD_BUFSIZ2 512
 
+extern bool verbose;
+
 typedef struct {
     size_t n_keys;
     char** keys;
