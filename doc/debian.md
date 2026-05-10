@@ -2,7 +2,7 @@ To install on debian-based Linux distros:
 
 1) Add our [PGP key](https://cradicle.xyz/cradicle.gpg) to your keyring
 
-`curl -fsSL https://deb.cradicle.xyz/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cradicle.gpg`
+`curl -fsSL https://deb.cradicle.xyz/cradicle.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cradicle.gpg`
 
 2) Next, add our repo to your list
 
