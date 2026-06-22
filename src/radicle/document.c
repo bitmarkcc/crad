@@ -26,13 +26,8 @@ Oid document_init (const Document doc, git_repository* repo, const Pubkey signer
     char buf[HEXSIZ];
     char* cob_id_str = strdup(git_oid_tostr(buf,HEXSIZ,&re.oid));
     char* did_core = pubkey_to_did(signer.bytes)+8;
-    strcpy(refname,"refs/namespaces/");
-    strcat(refname,did_core);
-    strcat(refname,"/refs/rad/id");
-    strcpy(reftarget,"refs/namespaces/");
-    strcat(reftarget,did_core);
-    strcat(reftarget,"/refs/cobs/xyz.radicle.id/");
-    strcat(reftarget,cob_id_str);
+    snprintf(refname,sizeof(refname),"refs/namespaces/%s/refs/rad/id",did_core);
+    snprintf(reftarget,sizeof(reftarget),"refs/namespaces/%s/refs/cobs/xyz.radicle.id/%s",did_core,cob_id_str);
     strcpy(reflogmsg,"Create `rad/id` reference to point to new identity COB");
     
     if (git_reference_symbolic_create(&ref,repo,refname,reftarget,0,reflogmsg)) {

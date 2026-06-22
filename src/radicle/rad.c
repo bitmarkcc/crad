@@ -60,7 +60,7 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
 	    eprintf("failed to export public key to base 64 format");
 	    return 1;
 	}	
-	sprintf(line,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",delegates_list[i],b64_key);
+	snprintf(line,RAD_BUFSIZ,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",delegates_list[i],b64_key);
 	if (!rad_line_in_file(line,authkeys_fname)) {
 	    fputs(line,f);
 	}
@@ -85,8 +85,8 @@ int update_allowed_in_cob_db (Oid rid, SimpleSet* delegates, SimpleSet* allowed)
 	if (rc != SSH_OK) {
 	    eprintf("failed to export public key to base 64 format");
 	    return 1;
-	}	
-	sprintf(line,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",allowed_list[i],b64_key);
+	}
+	snprintf(line,RAD_BUFSIZ,"command=\"bash -l -c 'crad-rsync %s'\",restrict ssh-ed25519 %s\n",allowed_list[i],b64_key);
 	if (!rad_line_in_file(line,authkeys_fname)) {
 	    fputs(line,f);
 	}
@@ -183,12 +183,8 @@ int rad_init_configure (git_repository* repo, RadRepo rrepo, const char* default
     char pushurl [128];
     const char* rid = oid_to_rid(rrepo.rid);
     const char* did_raw = pubkey_to_did(signer.bytes)+8;
-    strcpy(fetchurl,"rad://");
-    strcat(fetchurl,rid);
-    strcpy(pushurl,"rad://");
-    strcat(pushurl,rid);
-    strcat(pushurl,"/");
-    strcat(pushurl,did_raw);	
+    snprintf(fetchurl,sizeof(fetchurl),"rad://%s",rid);
+    snprintf(pushurl,sizeof(pushurl),"rad://%s/%s",rid,did_raw);
     rad_repo_configure_remote(repo,"rad",fetchurl,pushurl);
 
     // push commits in default branch to rad repo

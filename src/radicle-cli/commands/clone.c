@@ -75,6 +75,10 @@ int clone_run (Command c) {
 	char* config_fname = malloc(strlen(crad_home)+13);
 	sprintf(config_fname,"%s/.ssh/config",crad_home);
 	FILE* f = fopen(config_fname,"w");
+	if (!f) {
+	    eprintf("failed to open ssh config file: %s",config_fname);
+	    return 1;
+	}
 	char line [256];
 	fputs("Host seed\n",f);
 	sprintf(line,"  HostName %s\n",host);
@@ -160,13 +164,9 @@ int clone_run (Command c) {
 	char fetchurl [128];
 	char pushurl [128];
 	const char* did_raw = pubkey_to_did(profile_get_pubkey().bytes)+8;
-	strcpy(fetchurl,"rad://");
-	strcat(fetchurl,rid_str+4);
-	strcpy(pushurl,"rad://");
-	strcat(pushurl,rid_str+4);
-	strcat(pushurl,"/");
-	strcat(pushurl,did_raw);
-	
+	snprintf(fetchurl,sizeof(fetchurl),"rad://%s",rid_str+4);
+	snprintf(pushurl,sizeof(pushurl),"rad://%s/%s",rid_str+4,did_raw);
+
 	if (rad_repo_configure_remote(repo,"rad",fetchurl,pushurl)) {
 	    eprintf("failed to configure remote for git repository");
 	    return 1;
@@ -307,12 +307,8 @@ int clone_run (Command c) {
 	const char* did_raw = pubkey_to_did(profile_get_pubkey().bytes)+8;
 	char fetchurl [128];
 	char pushurl [128];
-	strcpy(fetchurl,"rad://");
-	strcat(fetchurl,rid_str+4);
-	strcpy(pushurl,"rad://");
-	strcat(pushurl,rid_str+4);
-	strcat(pushurl,"/");
-	strcat(pushurl,did_raw);
+	snprintf(fetchurl,sizeof(fetchurl),"rad://%s",rid_str+4);
+	snprintf(pushurl,sizeof(pushurl),"rad://%s/%s",rid_str+4,did_raw);
 	if (rad_repo_configure_remote(working,"rad",fetchurl,pushurl)) {
 	    eprintf("failed to configure remote for git repository");
 	    return 1;

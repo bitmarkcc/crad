@@ -116,6 +116,10 @@ int sync_run (Command c) { // todo: sync refs/rad/id
 	char* config_fname = malloc(strlen(crad_home)+13);
 	sprintf(config_fname,"%s/.ssh/config",crad_home);
 	FILE* f = fopen(config_fname,"w");
+	if (!f) {
+	    eprintf("failed to open ssh config file: %s",config_fname);
+	    return 1;
+	}
 	char line [256];
 	fputs("Host seed\n",f);
 	sprintf(line,"  HostName %s\n",host);

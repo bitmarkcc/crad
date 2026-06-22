@@ -111,6 +111,10 @@ int node_run () {
     char* sshd_fname = malloc(strlen(rad_home)+18);
     sprintf(sshd_fname,"%s/.ssh/sshd_config",rad_home);
     FILE* f_sshd = fopen(sshd_fname,"w");
+    if (!f_sshd) {
+	eprintf("failed to open sshd config file: %s",sshd_fname);
+	return 1;
+    }
     char line [RAD_BUFSIZ];
     sprintf(line,"Port %d\n",sshd_port);
     fputs(line,f_sshd);

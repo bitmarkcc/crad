@@ -16,11 +16,15 @@ char* pubkey_to_did (const uint8_t* key) {
 }
 
 uint8_t* raw_did_to_pubkey (const char* did) {
-    return decode_base58(did,34) + 2;
+    uint8_t* decoded = decode_base58(did,34);
+    if (!decoded) return 0;
+    return decoded + 2;
 }
 
 uint8_t* did_to_pubkey (const char* did) {
-    return decode_base58(did+8,34) + 2;
+    uint8_t* decoded = decode_base58(did+8,34);
+    if (!decoded) return 0;
+    return decoded + 2;
 }
 
 char* oid_to_rid (const Oid oid) {
@@ -29,8 +33,10 @@ char* oid_to_rid (const Oid oid) {
 }
 
 Oid rid_to_oid (const char* rid_str) {
-    Oid oid;
-    memcpy(oid.id,decode_base58(rid_str,20),20);
+    Oid oid = {{0}};
+    uint8_t* decoded = decode_base58(rid_str,20);
+    if (!decoded) return oid;
+    memcpy(oid.id,decoded,20);
     return oid;
 }
 

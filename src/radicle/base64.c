@@ -113,9 +113,8 @@ char* encode_base64 (const uint8_t* inp, size_t len) {
         it++;
     }
 
-    char* str = malloc(zeroes+(b64+size-it)+1);
-    memset(str,'1',zeroes);
-    str += zeroes;
+    int encoded_len = b64+size-it;
+    char* str = malloc(encoded_len+1);
     char* str_it = str;
     while (it != b64+size) {
 	*str_it++ = base64[*(it++)];

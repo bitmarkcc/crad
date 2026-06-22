@@ -471,6 +471,10 @@ bool rad_line_in_file (const char* line, const char* filename) {
     char* line_stripped = strdup(line);
     rad_rstrip_nl(line_stripped);
     FILE* f = fopen(filename,"r");
+    if (!f) {
+	free(line_stripped);
+	return false;
+    }
     char curline [RAD_BUFSIZ];
     while (fgets(curline,RAD_BUFSIZ,f)) {
 	rad_rstrip_nl(curline);
@@ -480,6 +484,7 @@ bool rad_line_in_file (const char* line, const char* filename) {
 	}
     }
     fclose(f);
+    free(line_stripped);
     return ret;
 }
 

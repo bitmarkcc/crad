@@ -76,7 +76,7 @@ int auth_init (const char* cmd_alias, const char* cmd_passphrase) {
     printf("Initializing your radicle identity\n");
     char alias [RAD_BUFSIZ];
     if (cmd_alias) {
-	strcpy(alias,cmd_alias);
+	snprintf(alias,RAD_BUFSIZ,"%s",cmd_alias);
     }
     else {
 	char* env_user = getenv("USER");

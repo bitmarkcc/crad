@@ -1861,7 +1861,7 @@ int issue_list (SimpleSet* assigned, IssueState state, const char* rid) {
 	strcpy(assignees_str,"");
 	if (!n_assignees) strcpy(assignees_str,"_");
 	for (size_t j=0; j<n_assignees; j++) {
-	    strcat(assignees_str,assignees_list[i]);
+	    strcat(assignees_str,assignees_list[j]);
 	    if (j<n_assignees-1)
 		strcat(assignees_str,",");
 	}
