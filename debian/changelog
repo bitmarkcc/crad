@@ -1,3 +1,14 @@
+cradicle (0.1.0-3) unstable; urgency=low
+
+  * Update bundled Radicle heartwood binaries to 1.9.1
+  * Fix memory safety bugs in base58/base64 encoding
+  * Fix NULL pointer dereferences on invalid input
+  * Fix unchecked fopen() calls in node, clone, and sync
+  * Fix buffer overflow risks with snprintf
+  * Fix wrong loop variable in issue assignee listing
+
+ -- AK <ak@xmark.cc>  Wed, 25 Jun 2026 10:00:00 +0000
+
 cradicle (0.1.0-2) unstable; urgency=low
 
   * Add wallet COB type for cryptocurrency wallet addresses
