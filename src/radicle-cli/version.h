@@ -2,9 +2,9 @@
 #define RADICLE_VERSION_H
 
 #define NAME "C-Radicle"
-#define RADICLE_VERSION "0.1"
-#define GIT_HEAD "deadbeef1234"
-#define TIMESTAMP "1763053651"
+#define RADICLE_VERSION "0.2"
+#define GIT_HEAD "91421c29698a"
+#define TIMESTAMP "1782508720"
 
 typedef struct {
     const char* name;
