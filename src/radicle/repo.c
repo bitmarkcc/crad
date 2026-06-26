@@ -324,12 +324,13 @@ Oid rad_repo_sign_refs  (RadRepo rrepo, Pubkey signer) {
 	char* oid_str = strdup(git_oid_tostr(buf,HEXSIZ,&oid));
 	char* short_name = rad_substr(name,17+strlen(did_raw),0); // remove the refs/namespaces/<did>/ part
 	// add oid and short_name to list of refs to sign
-	if (strcmp(short_name,"refs/rad/sigrefs")) { // don't include the last sigrefs reference
-	    strcat(refs_str,oid_str);
-	    strcat(refs_str," ");
-	    strcat(refs_str,short_name);
-	    strcat(refs_str,"\n");
+	if (!strcmp(short_name,"refs/rad/sigrefs")) {
+	    short_name = strdup("refs/rad/sigrefs-parent");
 	}
+	strcat(refs_str,oid_str);
+	strcat(refs_str," ");
+	strcat(refs_str,short_name);
+	strcat(refs_str,"\n");
     }
     if (ret != GIT_ITEROVER) {
 	fprintf(stderr,"Error iterating over glob reference names\n");
@@ -595,9 +596,29 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 	const uint8_t* refs_content = strdup(blob_content);
 	char* token = strtok((char*)blob_content,"\n");
 	while (token) {
-	    char* full_token = malloc(strlen(token)+64);
-	    sprintf(full_token,"%s %s",token,namespaces_list[i]);
-	    set_add_str(&sigref_entries,full_token);
+	    // Check if this is a sigrefs-parent entry
+	    char* entry_name = rad_sigref_entry_name_raw(token);
+	    if (!strcmp(entry_name,"refs/rad/sigrefs-parent")) {
+		// Validate that sigrefs-parent OID matches the parent commit of the sigrefs commit
+		char* parent_oid_str = rad_sigref_entry_oid(token);
+		unsigned int parent_count = git_commit_parentcount(commit);
+		if (parent_count > 0) {
+		    const git_oid* actual_parent = git_commit_parent_id(commit,0);
+		    char parent_buf [HEXSIZ];
+		    git_oid_tostr(parent_buf,HEXSIZ,actual_parent);
+		    if (strcmp(parent_oid_str,parent_buf)) {
+			eprintf("sigrefs-parent OID mismatch for namespace %s",namespaces_list[i]);
+			return rid;
+		    }
+		} else {
+		    eprintf("sigrefs-parent entry exists but sigrefs commit has no parent in namespace %s",namespaces_list[i]);
+		    return rid;
+		}
+	    } else {
+		char* full_token = malloc(strlen(token)+64);
+		sprintf(full_token,"%s %s",token,namespaces_list[i]);
+		set_add_str(&sigref_entries,full_token);
+	    }
 	    token = strtok(0,"\n");
 	}
 	//verify signature
@@ -622,6 +643,43 @@ Oid rad_repo_validate (const char* path) { // todo: reject if a commit is far in
 	if (rad_sig_verify(refs_content,refs_size,sig,signer)) {
 	    eprintf("signature verification failed for sigrefs with namespace %s",namespaces_list[i]);
 	    return rid;
+	}
+
+	// Walk the sigrefs commit chain to detect replay attacks.
+	// Each commit's /signature blob OID must be unique in the chain.
+	SimpleSet seen_sigs;
+	set_init(&seen_sigs);
+	git_commit* walk_commit = commit;
+	char sig_oid_buf [HEXSIZ];
+	while (walk_commit) {
+	    git_tree* walk_tree = 0;
+	    if (git_commit_tree(&walk_tree,walk_commit)) {
+		eprintf("failed to get tree for sigrefs commit in namespace %s",namespaces_list[i]);
+		return rid;
+	    }
+	    git_tree_entry* sig_entry = 0;
+	    if (git_tree_entry_bypath(&sig_entry,walk_tree,"signature")) {
+		eprintf("missing signature blob in sigrefs commit in namespace %s",namespaces_list[i]);
+		return rid;
+	    }
+	    const git_oid* sig_blob_oid = git_tree_entry_id(sig_entry);
+	    git_oid_tostr(sig_oid_buf,HEXSIZ,sig_blob_oid);
+	    if (set_contains_str(&seen_sigs,sig_oid_buf) == SET_TRUE) {
+		eprintf("replay detected: duplicate signature in sigrefs chain for namespace %s",namespaces_list[i]);
+		return rid;
+	    }
+	    set_add_str(&seen_sigs,strdup(sig_oid_buf));
+	    // Move to parent commit
+	    if (git_commit_parentcount(walk_commit) > 0) {
+		git_commit* parent = 0;
+		if (git_commit_parent(&parent,walk_commit,0)) {
+		    eprintf("failed to lookup parent of sigrefs commit in namespace %s",namespaces_list[i]);
+		    return rid;
+		}
+		walk_commit = parent;
+	    } else {
+		walk_commit = 0;
+	    }
 	}
     }
     size_t n_sigref_entries = 0;

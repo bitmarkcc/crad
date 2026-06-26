@@ -81,6 +81,14 @@ char* rad_sigref_entry_name (const char* entry) {
     return out;
 }
 
+char* rad_sigref_entry_name_raw (const char* entry) {
+    while (*entry && *entry != ' ') {
+	entry++;
+    }
+    if (*entry) entry++;
+    return strdup(entry);
+}
+
 char* rad_sigref_entry_namespace (const char* entry) {
     while (*entry != ' ') {
 	entry++;
