@@ -1,3 +1,10 @@
+cradicle (0.2.0-1) unstable; urgency=low
+
+  * Fix signed references replay attack vulnerability (sigrefs-parent)
+  * Validate sigrefs commit chain for duplicate signatures
+
+ -- AK <ak@xmark.cc>  Fri, 27 Jun 2026 10:00:00 +0000
+
 cradicle (0.1.0-3) unstable; urgency=low
 
   * Update bundled Radicle heartwood binaries to 1.9.1
