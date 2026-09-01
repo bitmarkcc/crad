@@ -315,7 +315,7 @@ bool profile_init (const char* alias, const char* passphrase, const uint8_t* see
     strcpy(privkeyfile,keydir);
     strcat(privkeyfile,"/radicle");
 
-    if (!strlen(passphrase)) passphrase = 0;
+    if (!passphrase || !strlen(passphrase)) passphrase = 0;
     
     rc = ssh_pki_export_privkey_file_format(key,passphrase,0,0,privkeyfile,SSH_FILE_FORMAT_OPENSSH);
     if (rc != SSH_OK) {
