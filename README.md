@@ -17,7 +17,7 @@ Dependencies:
 - bash
 - basic Linux utilities like rsync
 
-* The radicle-heartwood node will run inside a bubblewrap container for security purposes. The reproducible binaries are in bin for convenience.
+* The radicle-heartwood node will run inside a bubblewrap container for security purposes. The reproducible binaries are in bin for convenience. You can place the binaries in $HOME/.radicle/bin .
 
 Installation: 
  
