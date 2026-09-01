@@ -2,8 +2,8 @@ C implementation of Radicle CLI and Node
 
 Dependencies:
 
-- Rust-based radicle (heartwood): https://seed.radicle.garden/z3gqcJUoA1n9HaHKufZs5FCSGazv5.git
-- A custom verison of libssh: rad:z3azMM7wahAi6AKgfhynEnZ5XzrSq
+- Rust-based radicle (heartwood): https://seed.radicle.garden/z3gqcJUoA1n9HaHKufZs5FCSGazv5.git *
+- A custom version of libssh: rad:z3azMM7wahAi6AKgfhynEnZ5XzrSq
 - libgit2
 - libjson-c
 - libsqlite3
@@ -17,7 +17,7 @@ Dependencies:
 - bash
 - basic Linux utilities like rsync
 
-The radicle-heartwood node will run inside a bubblewrap container for security purposes.
+* The radicle-heartwood node will run inside a bubblewrap container for security purposes. The reproducible binaries are in bin for convenience.
 
 Installation: 
  
